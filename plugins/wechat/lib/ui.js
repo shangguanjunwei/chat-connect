@@ -458,10 +458,10 @@ export const WECHAT_UI_JS = String.raw`
   function renderTabs() {
     if (!state.tabs) return
     if (state.accountLayout) {
-      state.accountLayout.classList.toggle('is-single', state.accounts.length <= 1)
+      state.accountLayout.classList.toggle('is-single', state.accounts.length === 0)
     }
     state.tabs.textContent = ''
-    if (state.accounts.length <= 1) {
+    if (state.accounts.length === 0) {
       state.tabs.hidden = true
       return
     }
