@@ -2,7 +2,7 @@ import Schema from '@deepseek-ai/schemastery'
 import { WechatService } from './service.js'
 
 export const name = 'chat-connect-wechat'
-export const inject = ['agents', 'agentDefaultModel', 'webServer', 'attachments', 'directoryPicker', 'skills', 'permissionPresets', 'approval', 'agentPresets']
+export const inject = ['agents', 'agentDefaultModel', 'webServer', 'attachments', 'directoryPicker', 'skills', 'permissionPresets', 'approval', 'agentPresets', 'sessionTitle']
 
 export const Config = Schema.object({
   dataDir: Schema.string().default('./.data'),

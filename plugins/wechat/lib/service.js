@@ -365,6 +365,7 @@ export class WechatService {
       else state.account.workspace = nextWorkspace
     }
     const after = this.workspaceForAccount(state.account)
+    if (hasLabel) this.applySessionTitle(accountId, state, nextLabel)
     if (hasWorkspace && resolve(after) !== resolve(before)) {
       await this.stopRuntime(state)
       state.sessionId = this.sessionIdFor(accountId, after)
@@ -867,6 +868,23 @@ export class WechatService {
     return content
   }
 
+  applySessionTitle(accountId, state, label) {
+    const agent =
+      state.handle?.agent ??
+      state.externalAgent ??
+      this.ctx.agents.get(state.sessionId)
+    if (!agent) return false
+    try {
+      this.ctx.sessionTitle.rename(agent.session, label ?? state.account.label)
+      return true
+    } catch (error) {
+      this.ctx.logger.warn(
+        `微信会话标题设置失败（${state.account.label}）: ${error instanceof Error ? error.message : String(error)}`,
+      )
+      return false
+    }
+  }
+
   applyWechatSessionPolicy(agent) {
     try {
       if (this.config.permissionPreset) {
@@ -887,6 +905,7 @@ export class WechatService {
     state.handle = null
     state.externalAgent = agent
     this.applyWechatSessionPolicy(agent)
+    this.applySessionTitle(accountId, state, state.account.label)
     this.sessionToAccount.set(state.sessionId, accountId)
     this.ctx.logger.info(`微信会话复用工作台已打开的 Agent: ${state.sessionId}`)
     return agent
@@ -940,6 +959,7 @@ export class WechatService {
       await presetScope[Symbol.asyncDispose]()
     }
     this.applyWechatSessionPolicy(state.handle.agent)
+    this.applySessionTitle(accountId, state, state.account.label)
     this.sessionToAccount.set(state.sessionId, accountId)
     return state.handle.agent
   }
