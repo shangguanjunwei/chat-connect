@@ -46,7 +46,7 @@ export function dshBinPath(): string {
   const found = dshBinCandidates().find(candidate => existsSync(candidate))
   if (found === undefined) {
     throw new RuntimeError(
-      '未找到内置的 DeepSeek Harness 运行时。请先运行 npm install，或重新安装应用。',
+      '未找到内置的本地引擎。请先运行 npm install，或重新安装应用。',
     )
   }
   return found
@@ -108,8 +108,8 @@ function bundledNodePath(): string | null {
 }
 
 function findSystemNode(): string | null {
-  if (process.env.DSH_STUDIO_NODE !== undefined && process.env.DSH_STUDIO_NODE !== '') {
-    return process.env.DSH_STUDIO_NODE
+  if (process.env.CHAT_CONNECT_NODE !== undefined && process.env.CHAT_CONNECT_NODE !== '') {
+    return process.env.CHAT_CONNECT_NODE
   }
   if (cachedSystemNode !== undefined) return cachedSystemNode
 
@@ -183,7 +183,7 @@ export function resolveSpawnRuntime(): SpawnRuntime {
   }
 
   throw new RuntimeError(
-    '没有可用的 Node.js 22.19+ 运行时。请重新安装应用，或设置 DSH_STUDIO_NODE 指向 Node 可执行文件。',
+    '没有可用的 Node.js 22.19+ 运行时。请重新安装应用，或设置 CHAT_CONNECT_NODE 指向 Node 可执行文件。',
   )
 }
 

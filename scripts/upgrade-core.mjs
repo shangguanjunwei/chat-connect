@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
- * One-command Harness upgrade for development.
+ * One-command engine (DeepSeek Harness) upgrade for development.
  *
- *   npm run upgrade:dsh              # upgrade to the latest npm release
- *   npm run upgrade:dsh -- 0.2.2     # pin a specific version
- *   npm run upgrade:dsh -- --dry-run # show what would change
- *   npm run upgrade:dsh -- --package # also build DMG + ZIP afterwards
- *   npm run upgrade:dsh -- 0.2.1 --force  # explicit rollback
+ *   npm run upgrade:core              # upgrade to the latest npm release
+ *   npm run upgrade:core -- 0.2.2     # pin a specific version
+ *   npm run upgrade:core -- --dry-run # show what would change
+ *   npm run upgrade:core -- --package # also build DMG + ZIP afterwards
+ *   npm run upgrade:core -- 0.2.1 --force  # explicit rollback
  *
- * The script bumps the pinned Harness packages, reinstalls, and runs any
+ * The script bumps the pinned engine packages, reinstalls, and runs any
  * package install scripts that npm 11.19+ gated behind its approval prompt.
  * Missing peer / nested dependencies are restored at package time by
  * scripts/after-pack.cjs, so an upgrade does not need manual peer bookkeeping.
@@ -101,7 +101,7 @@ function writePackage(pkg) {
   writeFileSync(PACKAGE_JSON, `${JSON.stringify(pkg, null, 2)}\n`)
 }
 
-function isHarnessPackage(name) {
+function isEnginePackage(name) {
   return name === '@deepseek-ai/dsh' || name.startsWith('@deepseek-ai/dsh-')
 }
 
@@ -118,7 +118,7 @@ function resolveTarget() {
   } catch (error) {
     throw new Error(
       `could not query the latest version (${error instanceof Error ? error.message : String(error)}). ` +
-        'Pass one explicitly: npm run upgrade:dsh -- 0.2.2',
+        'Pass one explicitly: npm run upgrade:core -- 0.2.2',
     )
   }
   const latest = output.split(/\r?\n/).filter(Boolean).at(-1)
@@ -167,14 +167,14 @@ function main() {
   next.version = target
   let bumped = 0
   for (const name of Object.keys(next.dependencies)) {
-    if (isHarnessPackage(name)) {
+    if (isEnginePackage(name)) {
       next.dependencies[name] = target
       bumped += 1
     }
   }
   next.dependencies = sortObject(next.dependencies)
 
-  console.log(`[upgrade] pinned ${bumped} Harness packages to ${target}`)
+  console.log(`[upgrade] pinned ${bumped} engine packages to ${target}`)
   if (dryRun) {
     console.log(JSON.stringify({ version: next.version, dependencies: next.dependencies }, null, 2))
     console.log('[upgrade] dry run: no files changed')
@@ -203,11 +203,11 @@ function main() {
 
   const dsh = installedVersion('@deepseek-ai/dsh')
   const mismatched = Object.entries(readPackage().dependencies)
-    .filter(([name]) => isHarnessPackage(name))
+    .filter(([name]) => isEnginePackage(name))
     .map(([name, expected]) => [name, expected, installedVersion(name)])
     .filter(([, expected, actual]) => expected !== actual)
   if (mismatched.length > 0) {
-    console.warn(`[upgrade] ${mismatched.length} Harness packages are not at ${target}:`)
+    console.warn(`[upgrade] ${mismatched.length} engine packages are not at ${target}:`)
     for (const [name, expected, actual] of mismatched.slice(0, 10)) {
       console.warn(`  ${name}: expected ${expected}, installed ${actual ?? 'missing'}`)
     }
@@ -220,7 +220,7 @@ function main() {
     const runtime = readFileSync(join(ROOT, 'scripts', 'prepare-node.mjs'), 'utf8').match(
       /const NODE_VERSION = '([^']+)'/,
     )?.[1]
-    console.log(`[upgrade] Harness requires Node ${engine}; packaged runtime is ${runtime ?? 'unknown'}`)
+    console.log(`[upgrade] engine requires Node ${engine}; packaged runtime is ${runtime ?? 'unknown'}`)
     const required = engine.match(/>=\s*(\d+\.\d+\.\d+)/)?.[1]
     if (runtime !== undefined && required !== undefined && compareVersions(runtime, required) < 0) {
       console.warn('[upgrade] update NODE_VERSION in scripts/prepare-node.mjs before packaging')

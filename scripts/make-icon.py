@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render the DSH Studio application icon.
+"""Render the Chat Connect application icon.
 
 Requires Pillow. Run with any Python that has it installed:
 

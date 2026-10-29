@@ -20,15 +20,15 @@ import { dshVersion, resolveSpawnRuntime } from './runtime'
 import { loadSettings } from './settings'
 import { focusWorkspace, openShell, openWorkspace } from './windows'
 
-app.setName('DSH Studio')
+app.setName('Chat Connect')
 
 // Development-only remote debugging, used to verify the rendered UI end to end.
-if (!app.isPackaged && process.env.DSH_STUDIO_CDP_PORT) {
-  app.commandLine.appendSwitch('remote-debugging-port', process.env.DSH_STUDIO_CDP_PORT)
+if (!app.isPackaged && process.env.CHAT_CONNECT_CDP_PORT) {
+  app.commandLine.appendSwitch('remote-debugging-port', process.env.CHAT_CONNECT_CDP_PORT)
 }
 
 if (!app.isPackaged) {
-  const devUserData = join(app.getPath('appData'), 'DSH Studio (Dev)')
+  const devUserData = join(app.getPath('appData'), 'Chat Connect (Dev)')
   mkdirSync(devUserData, { recursive: true, mode: 0o700 })
   app.setPath('userData', devUserData)
 }
@@ -117,12 +117,12 @@ if (!gotLock) {
     rebuildMenu()
 
     app.setAboutPanelOptions({
-      applicationName: 'DSH Studio',
+      applicationName: 'Chat Connect',
       applicationVersion: app.getVersion(),
-      version: `DeepSeek Harness ${dshVersion()}`,
-      copyright: 'DeepSeek Harness is developed by DeepSeek AI.',
+      version: `Chat Connect ${app.getVersion()}`,
+      copyright: 'Copyright © 2026 Chat Connect.',
       credits:
-        'DSH Studio bundles the open-source DeepSeek Harness release and runs it entirely on this computer.',
+        'Chat Connect bundles the open-source DeepSeek Harness engine (MIT), developed by DeepSeek AI.',
     })
 
     session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) => {
@@ -139,12 +139,12 @@ if (!gotLock) {
     try {
       resolveSpawnRuntime()
     } catch (error) {
-      console.error('[dsh-studio] runtime resolution failed:', error)
+      console.error('[chat-connect] runtime resolution failed:', error)
     }
 
     openShell('')
     console.info(
-      `[dsh-studio] ${appState().info.appVersion} · Harness ${dshVersion()} · Electron ${
+      `[chat-connect] ${appState().info.appVersion} · engine ${dshVersion()} · Electron ${
         process.versions.electron
       } · Node ${process.versions.node}`,
     )

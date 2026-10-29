@@ -210,8 +210,8 @@ export async function resetConfiguration(): Promise<AppState> {
     title: zh ? '重置应用配置' : 'Reset app configuration',
     message: zh ? '重置后会回到初始配置向导。' : 'This returns to the setup wizard.',
     detail: zh
-      ? '工作区文件、会话记录和 Harness 数据目录不会被删除，但应用会忘记已保存的 API Key、工作区路径和端口设置。'
-      : 'Workspace files, sessions, and the Harness data folder are kept. The app forgets the saved API key, workspace path, and port.',
+      ? '工作区文件、会话记录和引擎数据目录不会被删除，但应用会忘记已保存的 API Key、工作区路径和端口设置。'
+      : 'Workspace files, sessions, and the engine data folder are kept. The app forgets the saved API key, workspace path, and port.',
   }
   const choice = window
     ? await dialog.showMessageBox(window, options)

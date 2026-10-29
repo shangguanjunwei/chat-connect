@@ -1,6 +1,6 @@
-appId: com.dshstudio.app
-productName: DSH Studio
-copyright: Copyright © 2026 DSH Studio
+appId: com.shangguanjunwei.chatconnect
+productName: Chat Connect
+copyright: Copyright © 2026 Chat Connect
 
 directories:
   output: release
@@ -12,7 +12,7 @@ files:
   - '!**/*.map'
   - '!**/*.md'
 
-# The bundled Harness runtime is spawned by a real Node process, so every
+# The bundled agent runtime is spawned by a real Node process, so every
 # dependency has to exist on disk rather than inside the ASAR archive.
 asarUnpack:
   - node_modules/**/*
@@ -50,7 +50,7 @@ mac:
         - arm64
 
 dmg:
-  title: DSH Studio
+  title: Chat Connect
   window:
     width: 540
     height: 380

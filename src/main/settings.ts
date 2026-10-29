@@ -49,11 +49,11 @@ export function getSettingsPath(): string {
 
 export function defaultWorkspacePath(): string {
   const documents = app.getPath('documents')
-  return join(documents, 'DSH Workspace')
+  return join(documents, 'Chat Connect')
 }
 
 export function defaultDshHomePath(): string {
-  return join(app.getPath('userData'), 'dsh-home')
+  return join(app.getPath('userData'), 'engine')
 }
 
 export function expandHome(input: string): string {

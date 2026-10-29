@@ -36,20 +36,20 @@ interface Labels {
 
 const DICTIONARIES: Record<Language, Labels> = {
   'zh-CN': {
-    about: '关于 DSH Studio',
+    about: '关于 Chat Connect',
     settings: '设置…',
     restart: '重新启动本地服务',
     openBrowser: '在浏览器中打开',
     openLog: '打开服务日志',
     openData: '打开数据目录',
     reset: '重置应用配置…',
-    quit: '退出 DSH Studio',
+    quit: '退出 Chat Connect',
     file: '文件',
     edit: '编辑',
     view: '视图',
     window: '窗口',
     help: '帮助',
-    docs: 'DeepSeek Harness 文档',
+    docs: 'Chat Connect 文档',
     repo: 'GitHub 项目主页',
     reload: '重新载入界面',
     devtools: '开发者工具',
@@ -68,20 +68,20 @@ const DICTIONARIES: Record<Language, Labels> = {
     selectAll: '全选',
   },
   'en-US': {
-    about: 'About DSH Studio',
+    about: 'About Chat Connect',
     settings: 'Settings…',
     restart: 'Restart Local Service',
     openBrowser: 'Open in Browser',
     openLog: 'Open Service Log',
     openData: 'Open Data Folder',
     reset: 'Reset App Configuration…',
-    quit: 'Quit DSH Studio',
+    quit: 'Quit Chat Connect',
     file: 'File',
     edit: 'Edit',
     view: 'View',
     window: 'Window',
     help: 'Help',
-    docs: 'DeepSeek Harness Documentation',
+    docs: 'Chat Connect Documentation',
     repo: 'GitHub Repository',
     reload: 'Reload Interface',
     devtools: 'Developer Tools',
@@ -220,9 +220,9 @@ export function buildAppMenu(language: Language, actions: MenuActions): void {
 }
 
 export function openDocumentation(): void {
-  void shell.openExternal('https://deepseek-harness.github.io/deepseek-harness/')
+  void shell.openExternal('https://github.com/shangguanjunwei/chat-connect#readme')
 }
 
 export function openRepository(): void {
-  void shell.openExternal('https://github.com/deepseek-ai/deepseek-harness')
+  void shell.openExternal('https://github.com/shangguanjunwei/chat-connect')
 }

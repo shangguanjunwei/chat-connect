@@ -13,7 +13,7 @@ import { resolve } from 'node:path'
 const command = process.argv[2] ?? 'dev'
 const bin = resolve('node_modules', 'electron-vite', 'bin', 'electron-vite.js')
 if (!existsSync(bin)) {
-  console.error(`[dsh-studio] electron-vite not found at ${bin}. Run npm install first.`)
+  console.error(`[chat-connect] electron-vite not found at ${bin}. Run npm install first.`)
   process.exit(1)
 }
 

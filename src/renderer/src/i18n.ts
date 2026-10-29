@@ -1,9 +1,9 @@
 import type { Language } from '../../shared/types'
 
 const zh = {
-  'brand.name': 'DSH Studio',
-  'brand.tagline': 'DeepSeek Harness 桌面工作台',
-  'brand.version': 'Harness {version}',
+  'brand.name': 'Chat Connect',
+  'brand.tagline': '本地 AI 工作台',
+  'brand.version': '引擎 {version}',
   'language.label': '语言',
 
   'common.next': '下一步',
@@ -55,7 +55,7 @@ const zh = {
   'workspace.pathHint': '会话、任务与文件改动都以这里为根目录。',
   'workspace.pathRequired': '请选择工作区文件夹',
   'workspace.pick': '选择文件夹',
-  'workspace.dataLabel': 'Harness 数据目录',
+  'workspace.dataLabel': '引擎数据目录',
   'workspace.dataHint': '会话、凭据与配置存放的位置。默认位于应用数据目录，与命令行版相互隔离。',
   'workspace.portLabel': '本地服务端口',
   'workspace.portHint': '0 表示自动选择空闲端口。',
@@ -74,7 +74,7 @@ const zh = {
   'ready.key': 'API Key',
   'ready.keyNotSet': '未设置',
   'ready.launch': '启动工作台',
-  'ready.note': '启动后，应用会在后台运行 DeepSeek Harness 本地服务，仅监听 127.0.0.1。',
+  'ready.note': '启动后，应用会在后台运行本地 AI 引擎，仅监听 127.0.0.1。',
   'ready.restartNote': '保存后会重启本地服务，正在运行的任务会中断。',
 
   'settings.heading': '应用设置',
@@ -85,7 +85,7 @@ const zh = {
   'settings.backToWorkspace': '返回工作台',
 
   'boot.heading': '正在启动工作台',
-  'boot.subheading': '首次启动需要初始化 Harness 配置，通常只需要几秒钟。',
+  'boot.subheading': '首次启动需要初始化本地引擎配置，通常只需要几秒钟。',
   'boot.preparing': '准备中…',
   'boot.elapsed': '已等待 {s} 秒',
   'boot.errorHeading': '启动失败',
@@ -116,9 +116,9 @@ const zh = {
 export type MessageKey = keyof typeof zh
 
 const en: Record<MessageKey, string> = {
-  'brand.name': 'DSH Studio',
-  'brand.tagline': 'DeepSeek Harness desktop workspace',
-  'brand.version': 'Harness {version}',
+  'brand.name': 'Chat Connect',
+  'brand.tagline': 'Local AI workspace',
+  'brand.version': '引擎 {version}',
   'language.label': 'Language',
 
   'common.next': 'Continue',
@@ -172,7 +172,7 @@ const en: Record<MessageKey, string> = {
   'workspace.pathHint': 'Sessions, tasks, and file changes are rooted here.',
   'workspace.pathRequired': 'Choose a workspace folder',
   'workspace.pick': 'Choose folder',
-  'workspace.dataLabel': 'Harness data folder',
+  'workspace.dataLabel': 'Engine data folder',
   'workspace.dataHint':
     'Sessions, credentials, and configuration live here. The default is isolated from the CLI edition.',
   'workspace.portLabel': 'Local service port',
@@ -192,8 +192,7 @@ const en: Record<MessageKey, string> = {
   'ready.key': 'API key',
   'ready.keyNotSet': 'Not set',
   'ready.launch': 'Launch workspace',
-  'ready.note':
-    'The app runs the DeepSeek Harness local service in the background, bound to 127.0.0.1 only.',
+  'ready.note': 'The app runs the local AI engine in the background, bound to 127.0.0.1 only.',
   'ready.restartNote': 'Saving restarts the local service and interrupts running tasks.',
 
   'settings.heading': 'App settings',
@@ -204,7 +203,7 @@ const en: Record<MessageKey, string> = {
   'settings.backToWorkspace': 'Back to workspace',
 
   'boot.heading': 'Starting your workspace',
-  'boot.subheading': 'The first launch initializes the Harness profile. This usually takes a moment.',
+  'boot.subheading': 'The first launch initializes the local engine profile. This usually takes a moment.',
   'boot.preparing': 'Preparing…',
   'boot.elapsed': 'Waiting {s}s',
   'boot.errorHeading': 'Launch failed',

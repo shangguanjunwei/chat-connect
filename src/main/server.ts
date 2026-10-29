@@ -121,7 +121,7 @@ export class HarnessServer extends EventEmitter {
       message: '正在启动本地服务…',
       startedAt: Date.now(),
     })
-    this.progress('正在准备 DeepSeek Harness 运行时…')
+    this.progress('正在准备本地 AI 引擎…')
 
     const key = currentApiKey()
     if (key !== '') {
@@ -155,7 +155,7 @@ export class HarnessServer extends EventEmitter {
     delete env.DEEPSEEK_BASE_URL
     Object.assign(env, runtime.env, {
       DSH_HOME: settings.dshHome,
-      DSH_STUDIO: '1',
+      CHAT_CONNECT: '1',
       NO_COLOR: '1',
       FORCE_COLOR: '0',
       TERM: 'dumb',

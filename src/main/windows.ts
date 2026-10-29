@@ -1,5 +1,6 @@
 import { BrowserWindow, nativeTheme, shell } from 'electron'
 import { join } from 'node:path'
+import { WORKSPACE_BRAND_CSS } from './workspace-branding'
 
 const RENDERER_URL = process.env.ELECTRON_RENDERER_URL
 const preloadPath = join(__dirname, '../preload/index.js')
@@ -69,7 +70,7 @@ export function openShell(route = ''): BrowserWindow {
     minWidth: 900,
     minHeight: 620,
     show: false,
-    title: 'DSH Studio',
+    title: 'Chat Connect',
     backgroundColor: '#0b1220',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     webPreferences: {
@@ -130,7 +131,7 @@ export function openWorkspace(url: string): BrowserWindow {
     minWidth: 960,
     minHeight: 640,
     show: false,
-    title: 'DSH Studio',
+    title: 'Chat Connect',
     backgroundColor: '#151517',
     webPreferences: {
       contextIsolation: true,
@@ -142,6 +143,17 @@ export function openWorkspace(url: string): BrowserWindow {
   })
 
   workspaceWindow = window
+  // The upstream page sets its own document title on every navigation.
+  // Keep the native window/menu identity on Chat Connect.
+  window.on('page-title-updated', (event) => {
+    event.preventDefault()
+    window.setTitle('Chat Connect')
+  })
+  window.webContents.on('did-finish-load', () => {
+    void window.webContents.insertCSS(WORKSPACE_BRAND_CSS).catch(() => undefined)
+    dismissUpstreamPreview(window)
+  })
+
   window.once('ready-to-show', () => {
     if (!window.isDestroyed()) {
       window.show()
@@ -172,6 +184,48 @@ export function openWorkspace(url: string): BrowserWindow {
   bindWorkspaceTheme(window)
   void window.loadURL(url)
   return window
+}
+
+const dismissedPreviewWindows = new WeakSet<BrowserWindow>()
+
+/**
+ * The engine ships its own first-run preview notice with upstream branding.
+ * Chat Connect deliberately skips that notice so the first workspace view is
+ * its own product surface. The check is scoped by the dialog's accessible
+ * title and primary action, never by a generic "close any dialog" rule.
+ */
+function dismissUpstreamPreview(window: BrowserWindow): void {
+  if (dismissedPreviewWindows.has(window)) return
+  dismissedPreviewWindows.add(window)
+
+  let attempts = 0
+  const timer = setInterval(() => {
+    if (window.isDestroyed() || attempts >= 20) {
+      clearInterval(timer)
+      return
+    }
+    attempts += 1
+    void window.webContents
+      .executeJavaScript(
+        `(() => {
+          const titles = ['预览版说明', 'Preview Notice']
+          const dialog = Array.from(document.querySelectorAll('[role="dialog"]'))
+            .find(node => titles.includes((node.getAttribute('aria-label') || '').trim()))
+          if (!dialog) return false
+          const button = Array.from(dialog.querySelectorAll('button'))
+            .find(node => /^(继续|Continue)$/.test((node.textContent || '').trim()))
+          if (!button) return false
+          button.click()
+          return true
+        })()`,
+      )
+      .then((dismissed: boolean) => {
+        if (dismissed) clearInterval(timer)
+      })
+      .catch(() => undefined)
+  }, 500)
+
+  window.on('closed', () => clearInterval(timer))
 }
 
 const themedWindows = new WeakSet<BrowserWindow>()

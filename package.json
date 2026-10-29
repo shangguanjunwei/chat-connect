@@ -1,9 +1,9 @@
 {
-  "name": "dsh-studio",
+  "name": "chat-connect",
   "version": "0.2.1-rc.4",
   "private": true,
-  "description": "DeepSeek Harness 0.2.1-rc.4 desktop app with a graphical first-run setup wizard",
-  "author": "DSH Studio",
+  "description": "Chat Connect: a local AI workspace with a graphical first-run setup wizard",
+  "author": "Chat Connect",
   "license": "MIT",
   "main": "./out/main/index.js",
   "engines": {
@@ -19,7 +19,7 @@
     "dist:mac": "npm run build && node scripts/prepare-node.mjs && electron-builder --mac --arm64",
     "dist:win": "npm run build && node scripts/prepare-node.mjs && electron-builder --win --x64",
     "prepare:node": "node scripts/prepare-node.mjs",
-    "upgrade:dsh": "node scripts/upgrade-dsh.mjs"
+    "upgrade:core": "node scripts/upgrade-core.mjs"
   },
   "dependencies": {
     "@deepseek-ai/cordis-plugin-group": "~1.0.5",
@@ -70,5 +70,9 @@
     "koffi": true,
     "node-pty": true,
     "protobufjs": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shangguanjunwei/chat-connect.git"
   }
 }
