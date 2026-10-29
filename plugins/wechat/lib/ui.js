@@ -534,7 +534,7 @@ export const WECHAT_UI_JS = String.raw`
     name.textContent = account.label
     var meta = document.createElement('div')
     meta.className = 'ccw-account-meta'
-    meta.textContent = (account.hasCredentials ? text.loggedIn : text.noLogin) + ' · ' + account.messageCount + ' ' + text.messages
+    meta.textContent = account.hasCredentials ? text.loggedIn : text.noLogin
     copy.appendChild(name)
     copy.appendChild(meta)
     var pill = document.createElement('span')
