@@ -141,6 +141,7 @@ export const WECHAT_UI_JS = String.raw`
     accounts: [],
     online: 0,
     settings: null,
+    selectedAccountId: '',
     wechatSessionIds: [],
     rootInput: null,
     pending: null,
@@ -159,6 +160,7 @@ export const WECHAT_UI_JS = String.raw`
     launcher: null,
     overlay: null,
     list: null,
+    tabs: null,
     addInput: null,
     errorBox: null,
     onlinePill: null,
@@ -225,6 +227,21 @@ export const WECHAT_UI_JS = String.raw`
     '.ccw-error{margin-bottom:12px;padding:10px 12px;border-radius:10px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.24);color:#b91c1c;font-size:11.5px;white-space:pre-wrap}',
     ':host([data-theme="dark"]) .ccw-error{color:#fecaca}',
     '.ccw-list{display:flex;flex-direction:column;gap:10px}',
+    '.ccw-tabs{display:flex;gap:4px;overflow-x:auto;margin:0 0 10px;padding:3px;border-radius:11px;background:rgba(148,163,184,.09)}',
+    '.ccw-tabs[hidden]{display:none}',
+    '.ccw-tabs::-webkit-scrollbar{height:3px}',
+    '.ccw-tabs::-webkit-scrollbar-thumb{background:rgba(148,163,184,.3);border-radius:2px}',
+    '.ccw-tab{flex:0 0 auto;display:flex;align-items:center;gap:6px;height:32px;max-width:190px;padding:0 11px;border:0;border-radius:8px;background:transparent;color:#6b7280;font:inherit;font-size:12px;cursor:pointer}',
+    '.ccw-tab:hover{background:rgba(148,163,184,.12)}',
+    '.ccw-tab.active{background:#fff;color:#111827;box-shadow:0 1px 4px rgba(0,0,0,.12)}',
+    ':host([data-theme="dark"]) .ccw-tab{color:#98a4bd}',
+    ':host([data-theme="dark"]) .ccw-tab:hover{background:rgba(255,255,255,.06)}',
+    ':host([data-theme="dark"]) .ccw-tab.active{background:#2a2f3a;color:#f3f6ff;box-shadow:0 1px 4px rgba(0,0,0,.35)}',
+    '.ccw-tab-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.ccw-tab-dot{width:6px;height:6px;border-radius:50%;background:#9ca3af;flex:none}',
+    '.ccw-tab-dot.online{background:#07c160}',
+    '.ccw-tab-dot.warn{background:#f59e0b}',
+    '.ccw-tab-dot.error{background:#ef4444}',
     '.ccw-empty{padding:26px 12px;text-align:center;color:#6b7280;font-size:12.5px;border:1px dashed rgba(148,163,184,.32);border-radius:14px}',
     ':host([data-theme="dark"]) .ccw-empty{color:#98a4bd}',
     '.ccw-account{border:1px solid rgba(148,163,184,.22);border-radius:14px;padding:13px 14px;background:rgba(248,250,252,.55)}',
@@ -274,6 +291,7 @@ export const WECHAT_UI_JS = String.raw`
     '      </div>',
     '      <div class="ccw-error" hidden></div>',
     '      <div class="ccw-confirm" hidden><div class="ccw-confirm-text" data-pending-text></div><div class="ccw-confirm-actions"><button class="ccw-btn primary" type="button" data-confirm-workspace>' + text.confirmChange + '</button><button class="ccw-btn" type="button" data-cancel-workspace>' + text.cancel + '</button></div></div>',
+    '      <div class="ccw-tabs" role="tablist" hidden></div>',
     '      <div class="ccw-list"></div>',
     '    </div>',
     '    <footer class="ccw-foot"><span data-online></span><span>' + text.subtitle + '</span></footer>',
@@ -367,8 +385,12 @@ export const WECHAT_UI_JS = String.raw`
   }
 
   function applyState(data) {
+    var previousSelection = state.selectedAccountId
     state.accounts = Array.isArray(data.accounts) ? data.accounts : []
     state.online = Number(data.online) || 0
+    if (!state.accounts.some(function (account) { return account.id === previousSelection })) {
+      state.selectedAccountId = state.accounts.length > 0 ? state.accounts[0].id : ''
+    }
     state.settings = data.settings || state.settings
     if (state.rootInput && state.settings && (!state.root || state.root.activeElement !== state.rootInput)) {
       state.rootInput.value = state.settings.workspaceRoot || ''
@@ -390,6 +412,7 @@ export const WECHAT_UI_JS = String.raw`
     renderPending()
     state.host.setAttribute('data-theme', document.body && document.body.hasAttribute('data-ds-dark-theme') ? 'dark' : 'light')
     renderLauncher()
+    renderTabs()
     if (state.onlinePill) state.onlinePill.textContent = state.online + ' ' + text.count
     state.list.textContent = ''
     if (state.accounts.length === 0) {
@@ -399,8 +422,45 @@ export const WECHAT_UI_JS = String.raw`
       state.list.appendChild(empty)
       return
     }
+    var selected = state.accounts.filter(function (account) {
+      return account.id === state.selectedAccountId
+    })[0] || state.accounts[0]
+    state.selectedAccountId = selected.id
+    state.list.appendChild(renderAccount(selected))
+  }
+
+  function tabDotClass(status) {
+    if (status === 'online') return 'online'
+    if (status === 'error') return 'error'
+    if (status === 'waiting_qr' || status === 'scaned' || status === 'connecting') return 'warn'
+    return ''
+  }
+
+  function renderTabs() {
+    if (!state.tabs) return
+    state.tabs.textContent = ''
+    if (state.accounts.length <= 1) {
+      state.tabs.hidden = true
+      return
+    }
+    state.tabs.hidden = false
     for (var i = 0; i < state.accounts.length; i += 1) {
-      state.list.appendChild(renderAccount(state.accounts[i]))
+      var account = state.accounts[i]
+      var tab = document.createElement('button')
+      tab.type = 'button'
+      tab.className = 'ccw-tab' + (account.id === state.selectedAccountId ? ' active' : '')
+      tab.setAttribute('role', 'tab')
+      tab.setAttribute('aria-selected', account.id === state.selectedAccountId ? 'true' : 'false')
+      tab.setAttribute('data-account-tab', account.id)
+      tab.title = account.label
+      var dot = document.createElement('span')
+      dot.className = 'ccw-tab-dot ' + tabDotClass(account.status)
+      var label = document.createElement('span')
+      label.className = 'ccw-tab-label'
+      label.textContent = account.label
+      tab.appendChild(dot)
+      tab.appendChild(label)
+      state.tabs.appendChild(tab)
     }
   }
 
@@ -584,6 +644,9 @@ export const WECHAT_UI_JS = String.raw`
     try {
       var result = await api('/accounts', { method: 'POST', body: { label: label } })
       if (state.addInput) state.addInput.value = ''
+      if (result.accounts && result.accounts.length > 0) {
+        state.selectedAccountId = result.accounts[result.accounts.length - 1].id
+      }
       applyState(result)
     } catch (error) {
       showError(error instanceof Error ? error.message : String(error))
@@ -860,6 +923,7 @@ export const WECHAT_UI_JS = String.raw`
     state.launcher = root.querySelector('.ccw-launcher')
     state.overlay = root.querySelector('.ccw-overlay')
     state.list = root.querySelector('.ccw-list')
+    state.tabs = root.querySelector('.ccw-tabs')
     state.addInput = root.querySelector('.ccw-add input')
     state.errorBox = root.querySelector('.ccw-error')
     state.onlinePill = root.querySelector('[data-online]')
@@ -908,6 +972,12 @@ export const WECHAT_UI_JS = String.raw`
     })
     state.addInput.addEventListener('keydown', function (event) {
       if (event.key === 'Enter') addAccount()
+    })
+    state.tabs.addEventListener('click', function (event) {
+      var tab = event.target && event.target.closest ? event.target.closest('[data-account-tab]') : null
+      if (!tab) return
+      state.selectedAccountId = tab.getAttribute('data-account-tab')
+      render()
     })
     state.list.addEventListener('click', function (event) {
       var target = event.target
