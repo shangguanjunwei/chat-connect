@@ -6,6 +6,7 @@
  * JSON API on the DSH Web host so the injected panel can manage everything
  * without a separate process.
  */
+import { spawn } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { isAbsolute, join, resolve } from 'node:path'
@@ -17,6 +18,7 @@ import { IlinkClient } from './ilink/client.js'
 import { WECHAT_UI_JS } from './ui.js'
 import { WechatAccountRuntime } from './ilink/runtime.js'
 import { WechatMediaStore } from './media.js'
+import { FileSystemSkillProvider } from '@deepseek-ai/dsh-skill-filesystem'
 import {
   createAccount,
   loadAccounts,
@@ -86,6 +88,9 @@ export class WechatService {
     this.token = randomUUID()
     this.accounts = new Map()
     this.sessionToAccount = new Map()
+    this.skillProviders = new Map()
+    this.skillDisposer = null
+    this.picking = false
     this.disposers = []
     this.disposed = false
     this.loggedIn = 0
@@ -190,6 +195,7 @@ export class WechatService {
     )
     await this.loadSettings()
     await this.loadAccounts()
+    this.installSkills()
     this.ctx.logger.info(`Chat Connect 微信插件已加载（${this.accounts.size} 个账号）`)
   }
 
@@ -214,6 +220,7 @@ export class WechatService {
         lastIncoming: undefined,
         sessionId: this.sessionIdFor(account.id, this.workspaceForAccount(account)),
       })
+      await this.ensureSkillsDir(account.id).catch(() => undefined)
     }
   }
 
@@ -222,6 +229,10 @@ export class WechatService {
     for (const state of this.accounts.values()) {
       await this.stopAccount(state).catch(() => undefined)
     }
+    for (const provider of this.skillProviders.values()) {
+      await provider.dispose().catch(() => undefined)
+    }
+    this.skillProviders.clear()
     for (const dispose of this.disposers.splice(0)) {
       try {
         dispose()
@@ -243,6 +254,7 @@ export class WechatService {
       lastMessageAt: state.lastMessageAt,
       lastError: state.lastError,
       workspace: this.workspaceForAccount(state.account),
+      skillPath: join(this.workspaceForAccount(state.account), 'skills'),
       customWorkspace: Boolean(state.account.workspace),
       login: publicLogin(state.login),
     }))
@@ -281,6 +293,7 @@ export class WechatService {
       lastIncoming: undefined,
       sessionId: this.sessionIdFor(account.id, this.workspaceForAccount(account)),
     })
+    await this.ensureSkillsDir(account.id).catch(() => undefined)
     return this.publicState()
   }
 
@@ -330,6 +343,7 @@ export class WechatService {
       state.sessionId = this.sessionIdFor(accountId, after)
       state.status = 'idle'
       state.lastError = null
+      await this.ensureSkillsDir(accountId).catch(() => undefined)
     }
 
     const accounts = await loadAccounts(this.config.dataDir)
@@ -371,6 +385,7 @@ export class WechatService {
       state.sessionId = this.sessionIdFor(accountId, after)
       state.status = 'idle'
       state.lastError = null
+      await this.ensureSkillsDir(accountId).catch(() => undefined)
     }
     return this.publicState()
   }
@@ -616,6 +631,122 @@ export class WechatService {
     return this.workspaceForAccount(state.account)
   }
 
+  skillPath(accountId) {
+    return join(this.workspacePath(accountId), 'skills')
+  }
+
+  async ensureSkillsDir(accountId) {
+    const dir = this.skillPath(accountId)
+    await mkdir(dir, { recursive: true, mode: 0o700 })
+    return dir
+  }
+
+  isWechatWorkspace(cwd) {
+    if (!cwd) return false
+    const target = resolve(cwd)
+    for (const state of this.accounts.values()) {
+      if (resolve(this.workspaceForAccount(state.account)) === target) return true
+    }
+    return false
+  }
+
+  installSkills() {
+    this.skillDisposer = this.ctx.skills.registerProvider((control) => {
+      const disposeProviders = () => {
+        for (const provider of this.skillProviders.values()) {
+          void provider.dispose()
+        }
+        this.skillProviders.clear()
+      }
+      control.signal.addEventListener('abort', disposeProviders, { once: true })
+      const service = this
+      return {
+        name: 'wechat-skills',
+        async list(options) {
+          if (!service.isWechatWorkspace(options.cwd)) return []
+          return service.skillProviderFor(options.cwd, control).list(options)
+        },
+        async get(candidate, options) {
+          if (!service.isWechatWorkspace(options.cwd)) return undefined
+          return service.skillProviderFor(options.cwd, control).get(candidate, options)
+        },
+      }
+    })
+    this.disposers.push(this.skillDisposer)
+  }
+
+  skillProviderFor(cwd, control) {
+    const key = resolve(cwd)
+    let provider = this.skillProviders.get(key)
+    if (!provider) {
+      provider = new FileSystemSkillProvider(this.ctx, control, {
+        providerName: 'wechat-skills',
+        includeDefaultRoots: false,
+        customSkillDirs: [join(key, 'skills')],
+        watch: true,
+        watchUsePolling: false,
+      })
+      this.skillProviders.set(key, provider)
+    }
+    return provider
+  }
+
+  async openSkills(accountId) {
+    const dir = await this.ensureSkillsDir(accountId)
+    const command =
+      process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer' : 'xdg-open'
+    const child = spawn(command, [dir], { detached: true, stdio: 'ignore' })
+    child.on('error', (error) => {
+      this.ctx.logger.warn(`打开技能文件夹失败: ${error.message}`)
+    })
+    child.unref()
+    return dir
+  }
+
+  async listSkills(accountId) {
+    const cwd = this.workspacePath(accountId)
+    const skills = await this.ctx.skills.list({ cwd })
+    return skills
+      .filter((skill) => skill.provider === 'wechat-skills')
+      .map((skill) => ({
+        name: skill.name,
+        description: skill.description,
+        source: skill.source,
+      }))
+  }
+
+  async pickDirectory(req, res) {
+    if (this.picking) {
+      json(res, 409, { error: '已有文件夹选择框打开' })
+      return
+    }
+    const capability = this.ctx.directoryPicker?.capability?.()
+    if (!capability || capability.kind !== 'native') {
+      json(res, 409, {
+        error: '当前 DSH 目录选择器不是本机原生模式，请手动输入绝对路径',
+        kind: capability?.kind ?? 'none',
+      })
+      return
+    }
+    this.picking = true
+    const controller = new AbortController()
+    const abort = () => controller.abort()
+    req.once('aborted', abort)
+    res.once('close', abort)
+    try {
+      const selected = await capability.pick(controller.signal)
+      if (!res.writableEnded && !res.destroyed) json(res, 200, { path: selected ?? null })
+    } catch (error) {
+      if (res.writableEnded || res.destroyed) return
+      if (controller.signal.aborted) json(res, 200, { path: null })
+      else json(res, 400, { error: error instanceof Error ? error.message : String(error) })
+    } finally {
+      this.picking = false
+      req.off('aborted', abort)
+      res.off('close', abort)
+    }
+  }
+
   async buildContent(accountId, message) {
     const sender = message.chatType === 'group' ? '群聊' : '私聊'
     const pieces = [`来自微信${sender}（发送者 ${message.senderId}）`]
@@ -691,6 +822,7 @@ export class WechatService {
     if (state.handle) return state.handle.agent
     const workspace = this.workspacePath(accountId)
     await mkdir(workspace, { recursive: true, mode: 0o700 })
+    await this.ensureSkillsDir(accountId).catch(() => undefined)
     let agentOptions
     if (this.config.provider && this.config.model) {
       agentOptions = { provider: this.config.provider, model: this.config.model }
@@ -742,6 +874,15 @@ export class WechatService {
         json(res, 200, { ok: true, accounts: this.accounts.size })
         return
       }
+      if (method === 'GET' && path === '/picker') {
+        const capability = this.ctx.directoryPicker?.capability?.()
+        json(res, 200, { kind: capability?.kind ?? 'none', native: capability?.kind === 'native' })
+        return
+      }
+      if (method === 'POST' && path === '/pick-directory') {
+        await this.pickDirectory(req, res)
+        return
+      }
       if (method === 'GET' && path === '/settings') {
         json(res, 200, {
           workspaceRoot: this.workspaceRoot,
@@ -787,6 +928,19 @@ export class WechatService {
       if (method === 'POST' && addMatch) {
         const body = await readJson(req)
         json(res, 200, await this.addAccount(body.label))
+        return
+      }
+
+      const openSkillsMatch = /^\/accounts\/([^/]+)\/open-skills$/.exec(path)
+      if (method === 'POST' && openSkillsMatch) {
+        const accountId = decodeURIComponent(openSkillsMatch[1])
+        json(res, 200, { path: await this.openSkills(accountId) })
+        return
+      }
+      const skillsMatch = /^\/accounts\/([^/]+)\/skills$/.exec(path)
+      if (method === 'GET' && skillsMatch) {
+        const accountId = decodeURIComponent(skillsMatch[1])
+        json(res, 200, { skills: await this.listSkills(accountId) })
         return
       }
 
