@@ -143,7 +143,7 @@ export const WECHAT_UI_JS = String.raw`
     settings: null,
     selectedAccountId: '',
     wechatSessionIds: [],
-    rootInput: null,
+    rootDisplay: null,
     pending: null,
     pendingBox: null,
     pendingText: null,
@@ -204,11 +204,14 @@ export const WECHAT_UI_JS = String.raw`
     '.ccw-settings-title{font-size:11px;font-weight:600;margin-bottom:7px;color:#374151}',
     ':host([data-theme="dark"]) .ccw-settings-title{color:#c7d2e5}',
     '.ccw-settings-row{display:flex;gap:8px;align-items:center}',
+    '.ccw-workspace-value{margin-top:2px;font-size:11px;line-height:1.5;color:#374151;word-break:break-all;overflow-wrap:anywhere;white-space:normal}',
+    ':host([data-theme="dark"]) .ccw-workspace-value{color:#c7d2e5}',
+    '.ccw-settings-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}',
     '.ccw-hint{margin-top:6px;font-size:10px;line-height:1.45;color:#6b7280}',
     ':host([data-theme="dark"]) .ccw-hint{color:#98a4bd}',
     '.ccw-warn{color:#b45309}',
     ':host([data-theme="dark"]) .ccw-warn{color:#fcd34d}',
-    '.ccw-workspace-path{margin-top:3px;font-size:10.5px;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.ccw-workspace-path{margin-top:3px;font-size:10.5px;color:#6b7280;word-break:break-all;overflow-wrap:anywhere;white-space:normal}',
     ':host([data-theme="dark"]) .ccw-workspace-path{color:#98a4bd}',
     '.ccw-confirm{margin-bottom:12px;padding:11px 12px;border-radius:12px;border:1px solid rgba(7,193,96,.35);background:rgba(7,193,96,.08)}',
     '.ccw-confirm-text{font-size:11.5px;line-height:1.5;white-space:pre-wrap;word-break:break-all}',
@@ -285,7 +288,8 @@ export const WECHAT_UI_JS = String.raw`
     '      <div class="ccw-add"><input type="text" maxlength="40" placeholder="' + text.addPlaceholder + '"><button class="ccw-btn primary" type="button" data-add>' + text.add + '</button></div>',
     '      <div class="ccw-settings">',
     '        <div class="ccw-settings-title">' + text.workspaceRoot + '</div>',
-    '        <div class="ccw-settings-row"><input type="text" data-root placeholder="' + text.workspaceRootPrompt + '"><button class="ccw-btn" type="button" data-pick-root>' + text.pickFolder + '</button><button class="ccw-btn" type="button" data-save-root>' + text.save + '</button><button class="ccw-btn" type="button" data-reset-root>' + text.reset + '</button></div>',
+    '        <div class="ccw-workspace-value" data-root-display></div>',
+    '        <div class="ccw-settings-actions"><button class="ccw-btn" type="button" data-pick-root>' + text.pickFolder + '</button><button class="ccw-btn" type="button" data-reset-root>' + text.reset + '</button></div>',
     '        <div class="ccw-hint">' + text.workspaceHint + '</div>',
     '        <div class="ccw-hint ccw-warn">' + text.fullAccessHint + '</div>',
     '      </div>',
@@ -392,8 +396,9 @@ export const WECHAT_UI_JS = String.raw`
       state.selectedAccountId = state.accounts.length > 0 ? state.accounts[0].id : ''
     }
     state.settings = data.settings || state.settings
-    if (state.rootInput && state.settings && (!state.root || state.root.activeElement !== state.rootInput)) {
-      state.rootInput.value = state.settings.workspaceRoot || ''
+    if (state.rootDisplay && state.settings) {
+      state.rootDisplay.textContent = state.settings.workspaceRoot || ''
+      state.rootDisplay.title = state.settings.workspaceRoot || ''
     }
     state.error = ''
     render()
@@ -682,9 +687,8 @@ export const WECHAT_UI_JS = String.raw`
     renderPending()
   }
 
-  async function saveWorkspaceRoot(value, skipConfirm) {
+  async function saveWorkspaceRoot(value) {
     if (!state.settings) return
-    if (!skipConfirm && state.online > 0 && value !== state.settings.workspaceRoot && !window.confirm(text.workspaceConfirm)) return
     state.busy = 'settings'
     showError('')
     try {
@@ -699,9 +703,8 @@ export const WECHAT_UI_JS = String.raw`
   }
 
   async function resetWorkspaceRoot() {
-    if (!state.settings || !state.rootInput) return
-    state.rootInput.value = state.settings.defaultWorkspaceRoot || ''
-    await saveWorkspaceRoot(state.rootInput.value)
+    if (!state.settings) return
+    await saveWorkspaceRoot(state.settings.defaultWorkspaceRoot || '')
   }
 
   async function pickDirectory(kind, accountId, currentPath, online, label) {
@@ -712,8 +715,8 @@ export const WECHAT_UI_JS = String.raw`
       var data = await api('/pick-directory', { method: 'POST' })
       if (!data || !data.path) return
       if (kind === 'root') {
-        if (state.rootInput) state.rootInput.value = data.path
-        setPending({ kind: 'root', path: data.path })
+        await saveWorkspaceRoot(data.path)
+        return
       } else {
         setPending({ kind: 'account', accountId: accountId, path: data.path, online: online, label: label })
       }
@@ -768,7 +771,7 @@ export const WECHAT_UI_JS = String.raw`
     if (!state.pending) return
     var pending = state.pending
     if (pending.kind === 'root') {
-      await saveWorkspaceRoot(pending.path, true)
+      await saveWorkspaceRoot(pending.path)
       return
     }
     state.busy = pending.accountId
@@ -788,9 +791,6 @@ export const WECHAT_UI_JS = String.raw`
   }
 
   function cancelPending() {
-    if (state.pending && state.pending.kind === 'root' && state.rootInput && state.settings) {
-      state.rootInput.value = state.settings.workspaceRoot || ''
-    }
     clearPending()
   }
 
@@ -844,7 +844,7 @@ export const WECHAT_UI_JS = String.raw`
     if (!kind) return
     if (kind === 'root-workspace') {
       closeRename()
-      await saveWorkspaceRoot(value, true)
+      await saveWorkspaceRoot(value)
       return
     }
     if (!accountId) return
@@ -934,7 +934,7 @@ export const WECHAT_UI_JS = String.raw`
       if (event.target === state.overlay) closePanel()
     })
     root.querySelector('[data-add]').addEventListener('click', addAccount)
-    state.rootInput = root.querySelector('[data-root]')
+    state.rootDisplay = root.querySelector('[data-root-display]')
     state.pendingBox = root.querySelector('.ccw-confirm')
     state.pendingText = root.querySelector('[data-pending-text]')
     state.renameDialog = root.querySelector('.ccw-rename')
@@ -961,14 +961,8 @@ export const WECHAT_UI_JS = String.raw`
     root.querySelector('[data-cancel-workspace]').addEventListener('click', function () {
       cancelPending()
     })
-    root.querySelector('[data-save-root]').addEventListener('click', function () {
-      if (state.rootInput) void saveWorkspaceRoot(state.rootInput.value.trim())
-    })
     root.querySelector('[data-reset-root]').addEventListener('click', function () {
       void resetWorkspaceRoot()
-    })
-    state.rootInput.addEventListener('keydown', function (event) {
-      if (event.key === 'Enter') void saveWorkspaceRoot(state.rootInput.value.trim())
     })
     state.addInput.addEventListener('keydown', function (event) {
       if (event.key === 'Enter') addAccount()
