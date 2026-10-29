@@ -412,7 +412,7 @@ Chat Connect 内置一个 DSH Host 插件 `plugins/wechat`，把微信 iLink Bot
 - **扫码登录**：点「连接」会请求 iLink 二维码，在面板里直接扫码；二维码状态每 1.5 秒更新；
 - **连接 / 断开 / 改名 / 删除**：登录凭据、游标、媒体按账号隔离；
 - **多媒体消息**：图片/文件/视频会从 iLink CDN 下载、AES-128-ECB 解密并落盘；图片作为 `image` block、文件/视频作为 `file` block 进入对应 DSH Agent session；
-- **语音**：优先使用微信 `voice_item.text` 转写；没有转写时保存音频文件，并在消息正文中明确告诉 Agent 当前不能自动识别音频；
+- **语音**：音频文件始终从 iLink 下载并保存到工作区；给 Agent 的内容只使用微信 `voice_item.text` 转写文本，音频不会作为文件附件交给模型；没有转写时保存音频并明确提示当前不能自动识别；
 - **微信会话隐藏输入框**：在工作台打开微信 session 时，底部聊天输入框会自动隐藏，避免在微信上下文之外手动输入；切回普通会话输入框自动恢复；
 - **与工作台共享 session**：如果微信 session 已经在工作台打开，插件会复用这个 live Agent，不再 `resume/create` 同一个 session，避免 `session already exists` 导致消息被丢弃；
 - **完整工具集**：微信 session 创建/恢复时会挂载 DSH 的默认 agent preset（默认 `standard`），包含 `bash`、文件读写/编辑、搜索、`skill`、subagent 等工具，而不是只有基础工作目录工具；
@@ -468,7 +468,8 @@ Chat Connect 内置一个 DSH Host 插件 `plugins/wechat`，把微信 iLink Bot
 
 当前限制：
 
-- 语音没有微信转写时不会本地 ASR，只把音频保存成附件并在消息里说明；
+- 语音没有微信转写时不会本地 ASR，只把音频保存到工作区并在消息里说明；
+- 语音音频不会作为 file block 发给模型；即使有转写，音频也只落盘存档；
 - Agent 的回复目前仍然只发送文字，暂不支持把图片/文件发回微信；
 - 视频按文件保存，不做关键帧抽取或视频理解；
 - 图片能否被模型直接理解取决于当前默认模型是否支持 image 输入；不支持时 DSH 会按图片占位文本投影，Agent 仍能看到文件引用；
@@ -580,7 +581,7 @@ Finder / Dock 双击不受影响。
 - 微信输入框：把 `dsh.sessions.current` 指向微信 session 时，`html[data-chat-connect-wechat-session]` 生效、`[data-composer-seat]` 计算样式为 `none`；切回普通 session 后恢复 `flex`。
 - live Agent 复用：模拟工作台持有微信 session Agent 时，第二条消息不再报 `session already exists`，而是直接使用同一 Agent。
 - 每账号 Skills：两个账号分别在 `skills/` 放入不同 skill，`/accounts/<id>/skills` 只返回自己的 skill，隔离验证通过。
-- 微信媒体：用本地 mock CDN 验证了图片 / 文件的下载与落盘、AES-128-ECB 解密、图片 `image` block 与文件 `file` block 进入 Agent session；语音转写进入正文，无转写时生成音频 `file` block。
+- 微信媒体：用本地 mock CDN 验证了图片 / 文件的下载与落盘、AES-128-ECB 解密、图片 `image` block 与文件 `file` block 进入 Agent session；语音音频始终下载落盘，但有转写时只把转写文本交给 Agent（不再附带音频 file block），无转写时只保留音频并提示。
 - 微信 Agent：默认模型从 DSH `agentDefaultModel` 读取；无效 Key 时 session 收到内容并返回 `AUTH` 错误。
 
 > 没有可用的真实微信账号和模型 Key，因此未完成一次真实扫码后的微信收发；上述验证覆盖二维码、媒体、附件内容和 Agent session 结构。

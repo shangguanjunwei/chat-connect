@@ -805,6 +805,11 @@ export class WechatService {
         continue
       }
       if (!item.data) continue
+      if (item.kind === 'voice') {
+        // Audio is archived by WechatMediaStore. The Agent receives the
+        // transcript from voice_item.text; never add a file block for audio.
+        continue
+      }
       if (item.kind === 'image' && ['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(item.mimeType)) {
         try {
           const attachment = await this.ctx.attachments.saveImage({
@@ -839,6 +844,22 @@ export class WechatService {
           text: `[${label} ${item.fileName ?? ''}] 已保存到 ${item.localPath}，但无法作为附件交给 Agent：${error instanceof Error ? error.message : String(error)}`,
         })
       }
+    }
+    const voiceItems = (message.raw?.item_list ?? []).filter((item) => item.voice_item)
+    const hasVoiceTranscript = voiceItems.some(
+      (item) => typeof item.voice_item?.text === 'string' && item.voice_item.text.trim().length > 0,
+    )
+    if (voiceItems.length > 0 && !hasVoiceTranscript) {
+      const hasSavedVoice = media.some((item) => item.kind === 'voice' && item.data)
+      const hasVoiceMedia = voiceItems.some((item) => item.voice_item?.media !== undefined)
+      content.push({
+        type: 'text',
+        text: hasSavedVoice
+          ? '[语音消息已保存为音频文件；微信没有提供转写，当前不能自动识别音频内容。]'
+          : hasVoiceMedia
+            ? '[语音消息下载失败；微信没有提供转写，当前不能自动识别音频内容。]'
+            : '[语音消息没有提供转写，也没有可下载的音频。]',
+      })
     }
     if (content.length === 1 && !message.text && media.length === 0) {
       content.push({ type: 'text', text: '[收到一条暂不支持的消息类型]' })

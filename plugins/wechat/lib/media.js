@@ -136,16 +136,18 @@ function collectTargets(raw) {
 
     const voice = item.voice_item
     if (item.type === 3 || (item.type === undefined && voice)) {
-      // iLink already provides a server-side transcript for most voices. Use it
-      // as text and avoid downloading audio that a text model cannot consume.
-      if (typeof voice?.text === 'string' && voice.text.trim().length > 0) return
-      targets.push({
-        kind: 'voice',
-        index,
-        media: voice?.media,
-        keyValue: voice?.media?.aes_key,
-        voiceEncodeType: voice?.encode_type,
-      })
+      // Always archive the audio file. The Agent still receives only the
+      // server-side transcript (voice_item.text); the audio is never attached
+      // as a model file block.
+      if (voice?.media !== undefined) {
+        targets.push({
+          kind: 'voice',
+          index,
+          media: voice.media,
+          keyValue: voice.media?.aes_key,
+          voiceEncodeType: voice?.encode_type,
+        })
+      }
       return
     }
 
