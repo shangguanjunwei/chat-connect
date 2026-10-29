@@ -42,6 +42,13 @@ module.exports = async function afterPack(context) {
     return
   }
 
+  const bundledPlugin = join(projectDir, 'plugins', 'wechat')
+  const bundledPluginTarget = join(targetRoot, 'node_modules', 'chat-connect-wechat')
+  if (existsSync(bundledPlugin)) {
+    cpSync(bundledPlugin, bundledPluginTarget, { recursive: true, force: true })
+    console.log('[after-pack] bundled chat-connect-wechat plugin')
+  }
+
   const production = productionPaths(projectDir).sort((left, right) => left.length - right.length)
   const copiedPrefixes = []
   let copied = 0

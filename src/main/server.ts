@@ -13,6 +13,7 @@ import type { BootProgress, ServerState } from '../shared/types'
 import { writeDeepSeekKey } from './credentials'
 import { resolveSpawnRuntime } from './runtime'
 import { seedWorkspace } from './seed-workspace'
+import { ensureWechatPlugin } from './wechat-plugin'
 import { currentApiKey, loadSettings } from './settings'
 
 const ANSI = /\u001B\[[0-?]*[ -/]*[@-~]/g
@@ -129,6 +130,15 @@ export class HarnessServer extends EventEmitter {
     }
     mkdirSync(settings.workspace, { recursive: true, mode: 0o700 })
     seedWorkspace(settings.dshHome, settings.workspace)
+    try {
+      ensureWechatPlugin(settings.dshHome)
+      this.progress('微信连接插件已准备。')
+    } catch (error) {
+      this.progress(
+        `微信连接插件准备失败，应用将继续启动：${error instanceof Error ? error.message : String(error)}`,
+        'warn',
+      )
+    }
 
     const runtime = resolveSpawnRuntime()
     const args = [
@@ -156,6 +166,8 @@ export class HarnessServer extends EventEmitter {
     Object.assign(env, runtime.env, {
       DSH_HOME: settings.dshHome,
       CHAT_CONNECT: '1',
+      CHAT_CONNECT_WECHAT_DATA_DIR: settings.dshHome,
+      CHAT_CONNECT_WECHAT_LANG: loadSettings().language,
       NO_COLOR: '1',
       FORCE_COLOR: '0',
       TERM: 'dumb',

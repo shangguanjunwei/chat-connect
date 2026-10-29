@@ -1,0 +1,7 @@
+# Chat Connect WeChat bridge and control panel.
+- insert:
+    - id: chat-connect-wechat
+      name: 'chat-connect-wechat'
+      config:
+        dataDir: !!js "process.env.CHAT_CONNECT_WECHAT_DATA_DIR ?? './.data'"
+        autoReply: true
