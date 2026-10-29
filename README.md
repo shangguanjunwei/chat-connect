@@ -391,6 +391,7 @@ Chat Connect 内置一个 DSH Host 插件 `plugins/wechat`，把微信 iLink Bot
 - **连接 / 断开 / 改名 / 删除**：登录凭据、游标、媒体按账号隔离；
 - **多媒体消息**：图片/文件/视频会从 iLink CDN 下载、AES-128-ECB 解密并落盘；图片作为 `image` block、文件/视频作为 `file` block 进入对应 DSH Agent session；
 - **语音**：优先使用微信 `voice_item.text` 转写；没有转写时保存音频文件，并在消息正文中明确告诉 Agent 当前不能自动识别音频；
+- **完全权限**：微信 session 在创建 / 恢复后自动切换为 `danger-full-access`；审批策略保持 `ask`，但微信 session 的 `approval/request` 由插件自动返回 `allowed-once`。因此文件系统完全放开，需要审批的工具也不会卡住；
 - **自动回复**：最终 assistant 文本通过 iLink 发回微信；
 - **工作区可配置**：默认 `<engine>/wechat/workspaces/<accountId>`；面板顶部「工作区根目录」修改默认根目录，账号卡片「工作区」可单独指定；修改路径会断开在线账号，并为受影响的账号启用新的 DSH session（旧 session 保留）。路径必须是绝对路径，支持 `~`，目录不存在会自动创建；
 - **数据位置**：`<engine>/wechat/accounts/<id>/`；凭据 `credentials.json` 权限 `0600`；全局工作区设置 `<engine>/wechat/settings.json`；默认工作区 `<engine>/wechat/workspaces/<id>/`，媒体在 `<engine>/wechat/workspaces/<id>/media/<YYYY-MM-DD>/`；
@@ -429,6 +430,8 @@ Chat Connect 内置一个 DSH Host 插件 `plugins/wechat`，把微信 iLink Bot
 
 面板账号卡片上的「技能」按钮会直接打开这个目录。当前隔离粒度是**微信账号**，同一账号下的所有联系人共用该账号的 skills；不是按每个联系人拆 session。
 
+> **安全警告**：`danger-full-access` 意味着任何能给该微信机器人发消息的人，都可以让 Agent 执行命令、读写文件、访问网络。只绑定可信微信账号，不要把这个机器人拉进不可信群聊。
+
 插件在 profile 中作为 bundle 加载，不需要用户安装 pnpm 或手动改配置。首次启动时应用会预置：
 
 ```text
@@ -445,7 +448,8 @@ Chat Connect 内置一个 DSH Host 插件 `plugins/wechat`，把微信 iLink Bot
 - 视频按文件保存，不做关键帧抽取或视频理解；
 - 图片能否被模型直接理解取决于当前默认模型是否支持 image 输入；不支持时 DSH 会按图片占位文本投影，Agent 仍能看到文件引用；
 - WeChat 会话使用应用的默认模型；没有单独的模型配置；
-- Agent 触发审批时没有微信侧确认入口，复杂工具调用可能停在审批；
+- 微信会话固定完全权限并自动通过审批；目前不做"微信回复确认审批"的降级模式；
+- 工具本身被 DSH 策略 `deny`、或需要 macOS 系统权限（完全磁盘访问、辅助功能等）时，仍可能失败；自动审批只解决 `ask` 类型的审批，不会绕过工具自身的拒绝；
 - 由于没有真实微信账号，本仓库验证了二维码生成、账号管理、媒体下载/解密、图片/文件/语音消息进入 Agent session 的内容结构；扫码确认与真实收发需要你用微信完成。
 
 ## 修改界面
@@ -546,6 +550,7 @@ Finder / Dock 双击不受影响。
 - 失败路径：无效 API Key 时 `/models` 返回 401，界面显示错误；启动失败显示日志尾部与路径。
 - 微信面板：开发模式与打包 DMG 都能注入「微信」按钮，打开账号 / 二维码面板；二维码可正常生成。
 - 微信工作区：面板可修改全局根目录和单账号路径；路径持久化、非法相对路径拒绝、修改后 session 路径切换均已验证；原生目录选择器返回 `native`。
+- 微信权限：session 日志出现 `permission/preset=danger-full-access`、`sandbox/mode=danger-full-access`、最终 `approval/policy=ask`；插件以 `prepend` 注册审批 waterfall，WeChat session 的 ask 直接返回 `allowed-once`。
 - 每账号 Skills：两个账号分别在 `skills/` 放入不同 skill，`/accounts/<id>/skills` 只返回自己的 skill，隔离验证通过。
 - 微信媒体：用本地 mock CDN 验证了图片 / 文件的下载与落盘、AES-128-ECB 解密、图片 `image` block 与文件 `file` block 进入 Agent session；语音转写进入正文，无转写时生成音频 `file` block。
 - 微信 Agent：默认模型从 DSH `agentDefaultModel` 读取；无效 Key 时 session 收到内容并返回 `AUTH` 错误。

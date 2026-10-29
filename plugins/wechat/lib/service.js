@@ -19,6 +19,7 @@ import { WECHAT_UI_JS } from './ui.js'
 import { WechatAccountRuntime } from './ilink/runtime.js'
 import { WechatMediaStore } from './media.js'
 import { FileSystemSkillProvider } from '@deepseek-ai/dsh-skill-filesystem'
+import { setApprovalPolicy } from '@deepseek-ai/dsh-user-approval'
 import {
   createAccount,
   loadAccounts,
@@ -75,6 +76,7 @@ export class WechatService {
       provider: config.provider || '',
       model: config.model || '',
       autoReply: config.autoReply !== false,
+      permissionPreset: config.permissionPreset || 'danger-full-access',
       workspaceRoot: config.workspaceRoot || '',
       cdnBaseUrl: config.cdnBaseUrl || 'https://novac2c.cdn.weixin.qq.com/c2c',
       mediaMaxBytes: config.mediaMaxBytes ?? 100 * 1024 * 1024,
@@ -192,6 +194,18 @@ export class WechatService {
     )
     this.disposers.push(
       this.ctx.on('session/event', (session, event) => this.onSessionEvent(session, event)),
+    )
+    this.disposers.push(
+      this.ctx.on('approval/request', (request, next) => {
+        const session = request.agent.session
+        const accountId = this.sessionToAccount.get(String(session.id))
+        const cwd = session.meta?.cwd
+        if (!accountId && !this.isWechatWorkspace(cwd)) return next()
+        this.ctx.logger.warn(
+          `微信会话自动批准权限请求：${request.toolName}${request.reason ? `（${request.reason}）` : ''}`,
+        )
+        return Promise.resolve('allowed-once')
+      }, { prepend: true }),
     )
     await this.loadSettings()
     await this.loadAccounts()
@@ -847,6 +861,19 @@ export class WechatService {
         meta: { cwd: workspace },
         ...(agentOptions === undefined ? {} : { agentOptions }),
       })
+    }
+    try {
+      if (this.config.permissionPreset) {
+        this.ctx.permissionPresets.set(state.handle.agent.session, this.config.permissionPreset)
+        // The full-access preset pins approval=never, which would reject any
+        // ask that still reaches the approval seam. WeChat sessions instead
+        // stay on full sandbox and auto-approve through the listener above.
+        setApprovalPolicy(state.handle.agent.session, 'ask')
+      }
+    } catch (error) {
+      this.ctx.logger.warn(
+        `微信会话设置权限预设失败（${this.config.permissionPreset}）: ${error instanceof Error ? error.message : String(error)}`,
+      )
     }
     this.sessionToAccount.set(state.sessionId, accountId)
     return state.handle.agent
