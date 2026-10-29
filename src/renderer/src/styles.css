@@ -1102,10 +1102,10 @@ label {
   padding: 40px 44px 34px;
   text-align: center;
   border-radius: 24px;
-  border: 1px solid rgba(148, 163, 184, 0.15);
+  border: 0;
   background: rgba(9, 14, 26, 0.72);
   backdrop-filter: blur(22px);
-  box-shadow: 0 40px 120px rgba(0, 0, 0, 0.5);
+  box-shadow: none;
   animation: rise 0.45s ease both;
 }
 

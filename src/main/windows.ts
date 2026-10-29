@@ -7,6 +7,14 @@ const RENDERER_URL = process.env.ELECTRON_RENDERER_URL
 const preloadPath = join(__dirname, '../preload/index.js')
 const rendererFile = join(__dirname, '../renderer/index.html')
 
+const WORKSPACE_PREVIEW_CSS = `
+[role="dialog"][aria-label="预览版说明"],
+[role="dialog"][aria-label="Preview Notice"] {
+  display: none !important;
+  visibility: hidden !important;
+}
+`
+
 let shellWindow: BrowserWindow | null = null
 let workspaceWindow: BrowserWindow | null = null
 let shellRoute = ''
@@ -70,7 +78,7 @@ export function openShell(route = ''): BrowserWindow {
     (route === '' || route === '/boot') && loadSettings().onboardingComplete === true
   const window = new BrowserWindow({
     width: compactBoot ? 652 : 1080,
-    height: compactBoot ? 700 : 720,
+    height: compactBoot ? 600 : 720,
     minWidth: compactBoot ? 560 : 900,
     minHeight: compactBoot ? 420 : 620,
     show: false,
@@ -172,8 +180,11 @@ function fitShellWindow(window: BrowserWindow): void {
       // Pin the boot width: measuring width from the card creates a feedback
       // loop once the viewport (and therefore the card) shrinks with it.
       const width = 652
-      const height = Math.max(420, layout.height)
-      window.setMinimumSize(560, 420)
+      // Keep the full boot card (including the progress block) inside the
+      // window while it is still filling in; shrinking below this clipped the
+      // last progress line during the first few hundred milliseconds.
+      const height = Math.max(600, layout.height)
+      window.setMinimumSize(560, 600)
       const [currentWidth = 0, currentHeight = 0] = window.getContentSize()
       if (Math.abs(currentWidth - width) > 2 || Math.abs(currentHeight - height) > 2) {
         window.setContentSize(width, height)
@@ -231,8 +242,14 @@ export function openWorkspace(url: string): BrowserWindow {
     event.preventDefault()
     window.setTitle('Chat Connect')
   })
+  window.webContents.on('dom-ready', () => {
+    void window.webContents.insertCSS(WORKSPACE_BRAND_CSS).catch(() => undefined)
+    void window.webContents.insertCSS(WORKSPACE_PREVIEW_CSS).catch(() => undefined)
+    dismissUpstreamPreview(window)
+  })
   window.webContents.on('did-finish-load', () => {
     void window.webContents.insertCSS(WORKSPACE_BRAND_CSS).catch(() => undefined)
+    void window.webContents.insertCSS(WORKSPACE_PREVIEW_CSS).catch(() => undefined)
     dismissUpstreamPreview(window)
   })
 
@@ -305,7 +322,7 @@ function dismissUpstreamPreview(window: BrowserWindow): void {
         if (dismissed) clearInterval(timer)
       })
       .catch(() => undefined)
-  }, 500)
+  }, 300)
 
   window.on('closed', () => clearInterval(timer))
 }

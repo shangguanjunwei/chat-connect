@@ -28,6 +28,7 @@ export const harnessServer = new HarnessServer()
 
 let activeBoot: { id: number; promise: Promise<ServerState> } | null = null
 let bootSequence = 0
+const MIN_BOOT_VISIBLE_MS = 3_000
 let startupWarning: string | null = null
 let settingsChangedHook: () => void = () => undefined
 
@@ -82,6 +83,7 @@ function closeTransientShell(): void {
  * callers share one start attempt.
  */
 export async function bootNow(): Promise<ServerState> {
+  const startedAt = Date.now()
   if (harnessServer.isRunning()) {
     const url = harnessServer.getState().url
     if (url !== null) {
@@ -95,6 +97,8 @@ export async function bootNow(): Promise<ServerState> {
     const promise = (async () => {
       const state = await harnessServer.start()
       if (state.url !== null) {
+        const remaining = MIN_BOOT_VISIBLE_MS - (Date.now() - startedAt)
+        if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining))
         openWorkspace(state.url)
         closeTransientShell()
       }

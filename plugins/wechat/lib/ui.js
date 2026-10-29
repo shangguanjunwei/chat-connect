@@ -44,6 +44,8 @@ export const WECHAT_UI_JS = String.raw`
         login: '重新扫码',
         rename: '改名',
         renamePrompt: '输入新的账号备注',
+        renameTitle: '修改账号备注',
+        renameHint: '只改变面板显示名称，不影响微信登录或工作区。',
         remove: '删除',
         copy: '复制二维码链接',
         copied: '链接已复制',
@@ -98,6 +100,8 @@ export const WECHAT_UI_JS = String.raw`
         login: 'Scan again',
         rename: 'Rename',
         renamePrompt: 'New account label',
+        renameTitle: 'Rename account',
+        renameHint: 'Changes the panel label only; sign-in and workspace stay unchanged.',
         remove: 'Remove',
         copy: 'Copy QR link',
         copied: 'Copied',
@@ -138,6 +142,9 @@ export const WECHAT_UI_JS = String.raw`
     pending: null,
     pendingBox: null,
     pendingText: null,
+    renameDialog: null,
+    renameInput: null,
+    renameAccountId: '',
     timer: null,
     launcher: null,
     overlay: null,
@@ -194,6 +201,17 @@ export const WECHAT_UI_JS = String.raw`
     '.ccw-confirm{margin-bottom:12px;padding:11px 12px;border-radius:12px;border:1px solid rgba(7,193,96,.35);background:rgba(7,193,96,.08)}',
     '.ccw-confirm-text{font-size:11.5px;line-height:1.5;white-space:pre-wrap;word-break:break-all}',
     '.ccw-confirm-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:9px}',
+    '.ccw-rename{pointer-events:auto;position:fixed;inset:0;z-index:2147483002;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(4,8,16,.55);backdrop-filter:blur(5px)}',
+    '.ccw-rename[hidden]{display:none}',
+    '.ccw-rename-card{width:min(420px,92vw);padding:20px;border-radius:16px;border:1px solid rgba(148,163,184,.2);background:#fff;box-shadow:0 24px 70px rgba(0,0,0,.35)}',
+    ':host([data-theme="dark"]) .ccw-rename-card{background:#15171d;border-color:rgba(148,163,184,.22)}',
+    '.ccw-rename-card h3{margin:0 0 4px;font-size:16px;font-weight:650}',
+    '.ccw-rename-card p{margin:0 0 14px;font-size:11.5px;color:#6b7280}',
+    ':host([data-theme="dark"]) .ccw-rename-card p{color:#98a4bd}',
+    '.ccw-rename-card input{width:100%;height:38px;padding:0 12px;border-radius:10px;border:1px solid rgba(148,163,184,.32);background:rgba(248,250,252,.8);color:inherit;font:inherit;font-size:13px;outline:0}',
+    ':host([data-theme="dark"]) .ccw-rename-card input{background:#0e1117;border-color:rgba(148,163,184,.24)}',
+    '.ccw-rename-card input:focus{border-color:#07c160;box-shadow:0 0 0 3px rgba(7,193,96,.14)}',
+    '.ccw-rename-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}',
     '.ccw-error{margin-bottom:12px;padding:10px 12px;border-radius:10px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.24);color:#b91c1c;font-size:11.5px;white-space:pre-wrap}',
     ':host([data-theme="dark"]) .ccw-error{color:#fecaca}',
     '.ccw-list{display:flex;flex-direction:column;gap:10px}',
@@ -250,6 +268,14 @@ export const WECHAT_UI_JS = String.raw`
     '    </div>',
     '    <footer class="ccw-foot"><span data-online></span><span>' + text.subtitle + '</span></footer>',
     '  </section>',
+    '</div>',
+    '<div class="ccw-rename" hidden>',
+    '  <div class="ccw-rename-card" role="dialog" aria-modal="true">',
+    '    <h3>' + text.renameTitle + '</h3>',
+    '    <p>' + text.renameHint + '</p>',
+    '    <input type="text" maxlength="40" data-rename-input>',
+    '    <div class="ccw-rename-actions"><button class="ccw-btn" type="button" data-rename-cancel>' + text.cancel + '</button><button class="ccw-btn primary" type="button" data-rename-confirm>' + text.save + '</button></div>',
+    '  </div>',
     '</div>'
   ].join('\n')
 
@@ -690,15 +716,36 @@ export const WECHAT_UI_JS = String.raw`
     clearPending()
   }
 
-  async function renameAccount(accountId, currentLabel) {
-    var next = window.prompt(text.renamePrompt, currentLabel || '')
-    if (next === null) return
-    var label = next.trim()
-    if (!label) return
+  function openRename(accountId, currentLabel) {
+    state.renameAccountId = accountId
+    if (state.renameDialog) state.renameDialog.hidden = false
+    if (state.renameInput) {
+      state.renameInput.value = currentLabel || ''
+      window.setTimeout(function () {
+        state.renameInput.focus()
+        state.renameInput.select()
+      }, 0)
+    }
+  }
+
+  function closeRename() {
+    state.renameAccountId = ''
+    if (state.renameDialog) state.renameDialog.hidden = true
+  }
+
+  async function confirmRename() {
+    var accountId = state.renameAccountId
+    var label = state.renameInput ? state.renameInput.value.trim() : ''
+    if (!accountId) return
+    if (!label) {
+      showError(text.renamePrompt)
+      return
+    }
     state.busy = accountId
     showError('')
     try {
       applyState(await api('/accounts/' + encodeURIComponent(accountId), { method: 'PATCH', body: { label: label } }))
+      closeRename()
     } catch (error) {
       showError(error instanceof Error ? error.message : String(error))
     } finally {
@@ -744,6 +791,7 @@ export const WECHAT_UI_JS = String.raw`
 
   function closePanel() {
     state.open = false
+    closeRename()
     state.overlay.hidden = true
     if (state.timer !== null) {
       window.clearInterval(state.timer)
@@ -776,6 +824,19 @@ export const WECHAT_UI_JS = String.raw`
     state.rootInput = root.querySelector('[data-root]')
     state.pendingBox = root.querySelector('.ccw-confirm')
     state.pendingText = root.querySelector('[data-pending-text]')
+    state.renameDialog = root.querySelector('.ccw-rename')
+    state.renameInput = root.querySelector('[data-rename-input]')
+    root.querySelector('[data-rename-cancel]').addEventListener('click', closeRename)
+    root.querySelector('[data-rename-confirm]').addEventListener('click', function () {
+      void confirmRename()
+    })
+    state.renameDialog.addEventListener('click', function (event) {
+      if (event.target === state.renameDialog) closeRename()
+    })
+    state.renameInput.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter') void confirmRename()
+      if (event.key === 'Escape') closeRename()
+    })
     root.querySelector('[data-pick-root]').addEventListener('click', function () {
       void pickDirectory('root')
     })
@@ -807,7 +868,7 @@ export const WECHAT_UI_JS = String.raw`
       if (action === 'remove') { void removeAccount(accountId); return }
       if (action === 'rename') {
         var account = state.accounts.filter(function (item) { return item.id === accountId })[0]
-        void renameAccount(accountId, account ? account.label : '')
+        openRename(accountId, account ? account.label : '')
         return
       }
       if (action === 'workspace') {
