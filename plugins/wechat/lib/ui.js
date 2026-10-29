@@ -22,6 +22,14 @@ export const WECHAT_UI_JS = String.raw`
         subtitle: '扫码接入微信；文字、图片、文件和语音转写自动进入 Agent',
         addPlaceholder: '账号备注，例如：爸爸',
         add: '添加微信账号',
+        workspaceRoot: '工作区根目录',
+        workspaceHint: '每个账号默认使用根目录下的账号子目录；单独设置过工作区的账号不受影响。',
+        workspace: '工作区',
+        workspacePrompt: '输入该账号的工作区绝对路径；留空恢复默认',
+        workspaceRootPrompt: '输入微信工作区根目录的绝对路径',
+        workspaceConfirm: '修改工作区会断开在线账号，并为受影响的账号使用新的 DSH session（旧 session 保留）。继续？',
+        save: '保存',
+        reset: '默认',
         empty: '还没有微信账号，先添加一个，再点「连接」扫码。',
         connect: '连接',
         disconnect: '断开',
@@ -60,6 +68,14 @@ export const WECHAT_UI_JS = String.raw`
         subtitle: 'Scan to connect; text, images, files and voice go to the Agent',
         addPlaceholder: 'Account label, e.g. Dad',
         add: 'Add WeChat account',
+        workspaceRoot: 'Workspace root',
+        workspaceHint: 'Each account uses a subfolder by default; accounts with a custom workspace are not affected.',
+        workspace: 'Workspace',
+        workspacePrompt: 'Absolute workspace path for this account; leave empty to use the default',
+        workspaceRootPrompt: 'Absolute path for the WeChat workspace root',
+        workspaceConfirm: 'Changing the workspace disconnects online accounts and starts a new DSH session for affected accounts (the old session is kept). Continue?',
+        save: 'Save',
+        reset: 'Default',
         empty: 'No WeChat account yet. Add one, then click Connect to scan.',
         connect: 'Connect',
         disconnect: 'Disconnect',
@@ -100,6 +116,8 @@ export const WECHAT_UI_JS = String.raw`
     error: '',
     accounts: [],
     online: 0,
+    settings: null,
+    rootInput: null,
     timer: null,
     launcher: null,
     overlay: null,
@@ -132,9 +150,9 @@ export const WECHAT_UI_JS = String.raw`
     '.ccw-close:hover{background:rgba(148,163,184,.12);color:inherit}',
     '.ccw-body{padding:16px 22px 22px;overflow:auto}',
     '.ccw-add{display:flex;gap:10px;align-items:center;margin-bottom:14px}',
-    '.ccw-add input{flex:1;min-width:0;height:38px;padding:0 12px;border-radius:10px;border:1px solid rgba(148,163,184,.32);background:rgba(248,250,252,.8);color:inherit;font:inherit;font-size:12.5px;outline:0}',
-    ':host([data-theme="dark"]) .ccw-add input{background:#0e1117;border-color:rgba(148,163,184,.24)}',
-    '.ccw-add input:focus{border-color:#07c160;box-shadow:0 0 0 3px rgba(7,193,96,.14)}',
+    '.ccw-add input,.ccw-settings input{flex:1;min-width:0;height:38px;padding:0 12px;border-radius:10px;border:1px solid rgba(148,163,184,.32);background:rgba(248,250,252,.8);color:inherit;font:inherit;font-size:12.5px;outline:0}',
+    ':host([data-theme="dark"]) .ccw-add input,:host([data-theme="dark"]) .ccw-settings input{background:#0e1117;border-color:rgba(148,163,184,.24)}',
+    '.ccw-add input:focus,.ccw-settings input:focus{border-color:#07c160;box-shadow:0 0 0 3px rgba(7,193,96,.14)}',
     '.ccw-btn{height:34px;padding:0 12px;border-radius:9px;border:1px solid rgba(148,163,184,.28);background:transparent;color:inherit;font:inherit;font-size:12px;cursor:pointer;white-space:nowrap}',
     '.ccw-btn:hover{background:rgba(148,163,184,.12)}',
     '.ccw-btn[disabled]{opacity:.45;cursor:default}',
@@ -142,6 +160,15 @@ export const WECHAT_UI_JS = String.raw`
     '.ccw-btn.primary:hover{background:#06ad56}',
     '.ccw-btn.danger{color:#dc2626;border-color:rgba(220,38,38,.28)}',
     ':host([data-theme="dark"]) .ccw-btn.danger{color:#fca5a5;border-color:rgba(248,113,113,.28)}',
+    '.ccw-settings{margin-bottom:14px;padding:12px;border-radius:12px;border:1px solid rgba(148,163,184,.2);background:rgba(248,250,252,.45)}',
+    ':host([data-theme="dark"]) .ccw-settings{background:rgba(255,255,255,.025);border-color:rgba(148,163,184,.18)}',
+    '.ccw-settings-title{font-size:11px;font-weight:600;margin-bottom:7px;color:#374151}',
+    ':host([data-theme="dark"]) .ccw-settings-title{color:#c7d2e5}',
+    '.ccw-settings-row{display:flex;gap:8px;align-items:center}',
+    '.ccw-hint{margin-top:6px;font-size:10px;line-height:1.45;color:#6b7280}',
+    ':host([data-theme="dark"]) .ccw-hint{color:#98a4bd}',
+    '.ccw-workspace-path{margin-top:3px;font-size:10.5px;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    ':host([data-theme="dark"]) .ccw-workspace-path{color:#98a4bd}',
     '.ccw-error{margin-bottom:12px;padding:10px 12px;border-radius:10px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.24);color:#b91c1c;font-size:11.5px;white-space:pre-wrap}',
     ':host([data-theme="dark"]) .ccw-error{color:#fecaca}',
     '.ccw-list{display:flex;flex-direction:column;gap:10px}',
@@ -186,6 +213,11 @@ export const WECHAT_UI_JS = String.raw`
     '    </header>',
     '    <div class="ccw-body">',
     '      <div class="ccw-add"><input type="text" maxlength="40" placeholder="' + text.addPlaceholder + '"><button class="ccw-btn primary" type="button" data-add>' + text.add + '</button></div>',
+    '      <div class="ccw-settings">',
+    '        <div class="ccw-settings-title">' + text.workspaceRoot + '</div>',
+    '        <div class="ccw-settings-row"><input type="text" data-root placeholder="' + text.workspaceRootPrompt + '"><button class="ccw-btn" type="button" data-save-root>' + text.save + '</button><button class="ccw-btn" type="button" data-reset-root>' + text.reset + '</button></div>',
+    '        <div class="ccw-hint">' + text.workspaceHint + '</div>',
+    '      </div>',
     '      <div class="ccw-error" hidden></div>',
     '      <div class="ccw-list"></div>',
     '    </div>',
@@ -234,6 +266,10 @@ export const WECHAT_UI_JS = String.raw`
   function applyState(data) {
     state.accounts = Array.isArray(data.accounts) ? data.accounts : []
     state.online = Number(data.online) || 0
+    state.settings = data.settings || state.settings
+    if (state.rootInput && state.settings && (!state.root || state.root.activeElement !== state.rootInput)) {
+      state.rootInput.value = state.settings.workspaceRoot || ''
+    }
     state.error = ''
     render()
   }
@@ -282,6 +318,11 @@ export const WECHAT_UI_JS = String.raw`
     meta.textContent = (account.hasCredentials ? text.loggedIn : text.noLogin) + ' · ' + account.messageCount + ' ' + text.messages
     copy.appendChild(name)
     copy.appendChild(meta)
+    var workspacePath = document.createElement('div')
+    workspacePath.className = 'ccw-workspace-path'
+    workspacePath.textContent = text.workspace + ': ' + (account.workspace || '')
+    workspacePath.title = account.workspace || ''
+    copy.appendChild(workspacePath)
     var pill = document.createElement('span')
     pill.className = 'ccw-pill ' + statusClass(account.status)
     pill.textContent = text.status[account.status] || account.status
@@ -310,6 +351,14 @@ export const WECHAT_UI_JS = String.raw`
       if (state.busy === account.id) login.disabled = true
       actions.appendChild(login)
     }
+    var workspace = document.createElement('button')
+    workspace.className = 'ccw-btn'
+    workspace.type = 'button'
+    workspace.setAttribute('data-action', 'workspace')
+    workspace.setAttribute('data-id', account.id)
+    workspace.textContent = text.workspace
+    if (state.busy === account.id) workspace.disabled = true
+    actions.appendChild(workspace)
     var rename = document.createElement('button')
     rename.className = 'ccw-btn'
     rename.type = 'button'
@@ -416,6 +465,46 @@ export const WECHAT_UI_JS = String.raw`
     }
   }
 
+  async function saveWorkspaceRoot(value) {
+    if (!state.settings) return
+    if (state.online > 0 && state.settings && value !== state.settings.workspaceRoot && !window.confirm(text.workspaceConfirm)) return
+    state.busy = 'settings'
+    showError('')
+    try {
+      applyState(await api('/settings', { method: 'PUT', body: { workspaceRoot: value } }))
+    } catch (error) {
+      showError(error instanceof Error ? error.message : String(error))
+    } finally {
+      state.busy = ''
+      render()
+    }
+  }
+
+  async function resetWorkspaceRoot() {
+    if (!state.settings || !state.rootInput) return
+    state.rootInput.value = state.settings.defaultWorkspaceRoot || ''
+    await saveWorkspaceRoot(state.rootInput.value)
+  }
+
+  async function changeWorkspace(accountId, currentPath, online) {
+    var next = window.prompt(text.workspacePrompt, currentPath || '')
+    if (next === null) return
+    if (online && next.trim() !== (currentPath || '') && !window.confirm(text.workspaceConfirm)) return
+    state.busy = accountId
+    showError('')
+    try {
+      applyState(await api('/accounts/' + encodeURIComponent(accountId), {
+        method: 'PATCH',
+        body: { workspace: next.trim() }
+      }))
+    } catch (error) {
+      showError(error instanceof Error ? error.message : String(error))
+    } finally {
+      state.busy = ''
+      render()
+    }
+  }
+
   async function renameAccount(accountId, currentLabel) {
     var next = window.prompt(text.renamePrompt, currentLabel || '')
     if (next === null) return
@@ -499,6 +588,16 @@ export const WECHAT_UI_JS = String.raw`
       if (event.target === state.overlay) closePanel()
     })
     root.querySelector('[data-add]').addEventListener('click', addAccount)
+    state.rootInput = root.querySelector('[data-root]')
+    root.querySelector('[data-save-root]').addEventListener('click', function () {
+      if (state.rootInput) void saveWorkspaceRoot(state.rootInput.value.trim())
+    })
+    root.querySelector('[data-reset-root]').addEventListener('click', function () {
+      void resetWorkspaceRoot()
+    })
+    state.rootInput.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter') void saveWorkspaceRoot(state.rootInput.value.trim())
+    })
     state.addInput.addEventListener('keydown', function (event) {
       if (event.key === 'Enter') addAccount()
     })
@@ -513,6 +612,11 @@ export const WECHAT_UI_JS = String.raw`
       if (action === 'rename') {
         var account = state.accounts.filter(function (item) { return item.id === accountId })[0]
         void renameAccount(accountId, account ? account.label : '')
+        return
+      }
+      if (action === 'workspace') {
+        var wsAccount = state.accounts.filter(function (item) { return item.id === accountId })[0]
+        void changeWorkspace(accountId, wsAccount ? wsAccount.workspace : '', wsAccount ? wsAccount.status === 'online' : false)
         return
       }
       if (action === 'connect' || action === 'disconnect' || action === 'login') {

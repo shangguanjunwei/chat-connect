@@ -6,9 +6,10 @@
  * JSON API on the DSH Web host so the injected panel can manage everything
  * without a separate process.
  */
-import { randomUUID } from 'node:crypto'
-import { mkdir, rm } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import { createHash, randomUUID } from 'node:crypto'
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { isAbsolute, join, resolve } from 'node:path'
+import { homedir } from 'node:os'
 import QRCode from 'qrcode'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { joinAssistantStreamText } from '@deepseek-ai/dsh-llm/assistant-stream'
@@ -77,12 +78,71 @@ export class WechatService {
       mediaMaxBytes: config.mediaMaxBytes ?? 100 * 1024 * 1024,
       mediaTimeoutMs: config.mediaTimeoutMs ?? 60_000,
     }
+    this.defaultWorkspaceRoot = resolve(
+      config.workspaceRoot || join(this.config.dataDir, 'wechat', 'workspaces'),
+    )
+    this.workspaceRoot = this.defaultWorkspaceRoot
+    this.settingsPath = join(this.config.dataDir, 'wechat', 'settings.json')
     this.token = randomUUID()
     this.accounts = new Map()
     this.sessionToAccount = new Map()
     this.disposers = []
     this.disposed = false
     this.loggedIn = 0
+  }
+
+  async loadSettings() {
+    try {
+      const parsed = JSON.parse(await readFile(this.settingsPath, 'utf8'))
+      if (typeof parsed.workspaceRoot === 'string' && isAbsolute(parsed.workspaceRoot)) {
+        this.workspaceRoot = resolve(parsed.workspaceRoot)
+      }
+    } catch {
+      // No saved settings yet: the bundled default applies.
+    }
+  }
+
+  async saveSettings() {
+    await mkdir(join(this.config.dataDir, 'wechat'), { recursive: true, mode: 0o700 })
+    await writeFile(
+      this.settingsPath,
+      `${JSON.stringify({ workspaceRoot: this.workspaceRoot }, null, 2)}\n`,
+      { mode: 0o600 },
+    )
+  }
+
+  async resolveWorkspace(input) {
+    let value = String(input ?? '').trim()
+    if (!value) throw new Error('工作区路径不能为空')
+    if (value === '~') value = homedir()
+    else if (value.startsWith('~/') || value.startsWith('~\\')) {
+      value = join(homedir(), value.slice(2))
+    }
+    if (!isAbsolute(value)) throw new Error('请填写绝对路径（例如 /Users/you/WeChat）')
+    const absolute = resolve(value)
+    await mkdir(absolute, { recursive: true, mode: 0o700 })
+    const info = await stat(absolute)
+    if (!info.isDirectory()) throw new Error('该路径不是文件夹')
+    return absolute
+  }
+
+  workspaceForAccount(account) {
+    if (typeof account.workspace === 'string' && isAbsolute(account.workspace)) {
+      return resolve(account.workspace)
+    }
+    return join(this.workspaceRoot, account.id)
+  }
+
+  defaultAccountWorkspace(accountId) {
+    return join(this.defaultWorkspaceRoot, accountId)
+  }
+
+  sessionIdFor(accountId, workspace) {
+    if (resolve(workspace) === resolve(this.defaultAccountWorkspace(accountId))) {
+      return `wechat-${accountId}`
+    }
+    const digest = createHash('sha256').update(resolve(workspace)).digest('hex').slice(0, 10)
+    return `wechat-${accountId}-${digest}`
   }
 
   async install() {
@@ -128,6 +188,7 @@ export class WechatService {
     this.disposers.push(
       this.ctx.on('session/event', (session, event) => this.onSessionEvent(session, event)),
     )
+    await this.loadSettings()
     await this.loadAccounts()
     this.ctx.logger.info(`Chat Connect 微信插件已加载（${this.accounts.size} 个账号）`)
   }
@@ -151,7 +212,7 @@ export class WechatService {
         handle: null,
         pendingText: undefined,
         lastIncoming: undefined,
-        sessionId: `wechat-${account.id}`,
+        sessionId: this.sessionIdFor(account.id, this.workspaceForAccount(account)),
       })
     }
   }
@@ -181,11 +242,17 @@ export class WechatService {
       messageCount: state.messageCount,
       lastMessageAt: state.lastMessageAt,
       lastError: state.lastError,
+      workspace: this.workspaceForAccount(state.account),
+      customWorkspace: Boolean(state.account.workspace),
       login: publicLogin(state.login),
     }))
     return {
       accounts,
       online: accounts.filter((account) => account.status === 'online').length,
+      settings: {
+        workspaceRoot: this.workspaceRoot,
+        defaultWorkspaceRoot: this.defaultWorkspaceRoot,
+      },
     }
   }
 
@@ -212,7 +279,7 @@ export class WechatService {
       handle: null,
       pendingText: undefined,
       lastIncoming: undefined,
-      sessionId: `wechat-${account.id}`,
+      sessionId: this.sessionIdFor(account.id, this.workspaceForAccount(account)),
     })
     return this.publicState()
   }
@@ -233,16 +300,78 @@ export class WechatService {
     return this.publicState()
   }
 
-  async renameAccount(accountId, label) {
+  async updateAccount(accountId, patch) {
     const state = this.accounts.get(accountId)
     if (!state) throw new Error('账号不存在')
-    const name = (label || '').trim()
-    if (!name) throw new Error('账号备注不能为空')
-    state.account.label = name
+    const hasLabel = Object.prototype.hasOwnProperty.call(patch, 'label')
+    const hasWorkspace = Object.prototype.hasOwnProperty.call(patch, 'workspace')
+    let nextLabel
+    if (hasLabel) {
+      nextLabel = String(patch.label ?? '').trim()
+      if (!nextLabel) throw new Error('账号备注不能为空')
+    }
+    let nextWorkspace
+    if (hasWorkspace) {
+      nextWorkspace =
+        patch.workspace === '' || patch.workspace === null
+          ? undefined
+          : await this.resolveWorkspace(patch.workspace)
+    }
+
+    const before = this.workspaceForAccount(state.account)
+    if (hasLabel) state.account.label = nextLabel
+    if (hasWorkspace) {
+      if (nextWorkspace === undefined) delete state.account.workspace
+      else state.account.workspace = nextWorkspace
+    }
+    const after = this.workspaceForAccount(state.account)
+    if (hasWorkspace && resolve(after) !== resolve(before)) {
+      await this.stopRuntime(state)
+      state.sessionId = this.sessionIdFor(accountId, after)
+      state.status = 'idle'
+      state.lastError = null
+    }
+
     const accounts = await loadAccounts(this.config.dataDir)
     const target = accounts.find((account) => account.id === accountId)
-    if (target) target.label = name
+    if (target) {
+      if (hasLabel) target.label = nextLabel
+      if (hasWorkspace) {
+        if (nextWorkspace === undefined) delete target.workspace
+        else target.workspace = nextWorkspace
+      }
+    }
     await saveAccounts(this.config.dataDir, accounts)
+    return this.publicState()
+  }
+
+  async updateWorkspaceRoot(input) {
+    const next =
+      input === '' || input === null || input === undefined
+        ? this.defaultWorkspaceRoot
+        : await this.resolveWorkspace(input)
+    if (next === this.defaultWorkspaceRoot) {
+      await mkdir(next, { recursive: true, mode: 0o700 })
+    }
+
+    const before = new Map()
+    for (const [accountId, state] of this.accounts) {
+      if (!state.account.workspace) {
+        before.set(accountId, resolve(this.workspaceForAccount(state.account)))
+      }
+    }
+    this.workspaceRoot = next
+    await this.saveSettings()
+
+    for (const [accountId, state] of this.accounts) {
+      if (state.account.workspace) continue
+      const after = resolve(this.workspaceForAccount(state.account))
+      if (before.get(accountId) === after) continue
+      await this.stopRuntime(state)
+      state.sessionId = this.sessionIdFor(accountId, after)
+      state.status = 'idle'
+      state.lastError = null
+    }
     return this.publicState()
   }
 
@@ -482,10 +611,9 @@ export class WechatService {
   }
 
   workspacePath(accountId) {
-    return join(
-      this.config.workspaceRoot || join(this.config.dataDir, 'wechat', 'workspaces'),
-      accountId,
-    )
+    const state = this.accounts.get(accountId)
+    if (!state) throw new Error('账号不存在')
+    return this.workspaceForAccount(state.account)
   }
 
   async buildContent(accountId, message) {
@@ -614,6 +742,18 @@ export class WechatService {
         json(res, 200, { ok: true, accounts: this.accounts.size })
         return
       }
+      if (method === 'GET' && path === '/settings') {
+        json(res, 200, {
+          workspaceRoot: this.workspaceRoot,
+          defaultWorkspaceRoot: this.defaultWorkspaceRoot,
+        })
+        return
+      }
+      if (method === 'PUT' && path === '/settings') {
+        const body = await readJson(req)
+        json(res, 200, await this.updateWorkspaceRoot(body.workspaceRoot))
+        return
+      }
       if (process.env.CHAT_CONNECT_WECHAT_DEV === '1' && method === 'POST' && path === '/dev/message') {
         const body = await readJson(req)
         const state = this.find(body.accountId)
@@ -659,7 +799,7 @@ export class WechatService {
         }
         if (method === 'PATCH' || method === 'PUT') {
           const body = await readJson(req)
-          json(res, 200, await this.renameAccount(accountId, body.label))
+          json(res, 200, await this.updateAccount(accountId, body))
           return
         }
       }
