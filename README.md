@@ -391,6 +391,7 @@ Chat Connect 内置一个 DSH Host 插件 `plugins/wechat`，把微信 iLink Bot
 - **连接 / 断开 / 改名 / 删除**：登录凭据、游标、媒体按账号隔离；
 - **多媒体消息**：图片/文件/视频会从 iLink CDN 下载、AES-128-ECB 解密并落盘；图片作为 `image` block、文件/视频作为 `file` block 进入对应 DSH Agent session；
 - **语音**：优先使用微信 `voice_item.text` 转写；没有转写时保存音频文件，并在消息正文中明确告诉 Agent 当前不能自动识别音频；
+- **完整工具集**：微信 session 创建/恢复时会挂载 DSH 的默认 agent preset（默认 `standard`），包含 `bash`、文件读写/编辑、搜索、`skill`、subagent 等工具，而不是只有基础工作目录工具；
 - **完全权限**：微信 session 在创建 / 恢复后自动切换为 `danger-full-access`；审批策略保持 `ask`，但微信 session 的 `approval/request` 由插件自动返回 `allowed-once`。因此文件系统完全放开，需要审批的工具也不会卡住；
 - **自动回复**：最终 assistant 文本通过 iLink 发回微信；
 - **工作区可配置**：默认 `<engine>/wechat/workspaces/<accountId>`；面板顶部「工作区根目录」修改默认根目录，账号卡片「工作区」可单独指定；修改路径会断开在线账号，并为受影响的账号启用新的 DSH session（旧 session 保留）。路径必须是绝对路径，支持 `~`，目录不存在会自动创建；
@@ -551,6 +552,7 @@ Finder / Dock 双击不受影响。
 - 微信面板：开发模式与打包 DMG 都能注入「微信」按钮，打开账号 / 二维码面板；二维码可正常生成。
 - 微信工作区：面板可修改全局根目录和单账号路径；路径持久化、非法相对路径拒绝、修改后 session 路径切换均已验证；原生目录选择器返回 `native`。
 - 微信权限：session 日志出现 `permission/preset=danger-full-access`、`sandbox/mode=danger-full-access`、最终 `approval/policy=ask`；插件以 `prepend` 注册审批 waterfall，WeChat session 的 ask 直接返回 `allowed-once`。
+- 微信工具：请求头工具列表包含 `bash`、`read`、`write`、`edit`、`grep`、`glob`、`skill`、`subagent` 等，确认 preset 已挂载。
 - 每账号 Skills：两个账号分别在 `skills/` 放入不同 skill，`/accounts/<id>/skills` 只返回自己的 skill，隔离验证通过。
 - 微信媒体：用本地 mock CDN 验证了图片 / 文件的下载与落盘、AES-128-ECB 解密、图片 `image` block 与文件 `file` block 进入 Agent session；语音转写进入正文，无转写时生成音频 `file` block。
 - 微信 Agent：默认模型从 DSH `agentDefaultModel` 读取；无效 Key 时 session 收到内容并返回 `AUTH` 错误。

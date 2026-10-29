@@ -77,6 +77,7 @@ export class WechatService {
       model: config.model || '',
       autoReply: config.autoReply !== false,
       permissionPreset: config.permissionPreset || 'danger-full-access',
+      agentPreset: config.agentPreset || '',
       workspaceRoot: config.workspaceRoot || '',
       cdnBaseUrl: config.cdnBaseUrl || 'https://novac2c.cdn.weixin.qq.com/c2c',
       mediaMaxBytes: config.mediaMaxBytes ?? 100 * 1024 * 1024,
@@ -850,17 +851,30 @@ export class WechatService {
         }
       }
     }
+
+    const presetId = this.config.agentPreset || this.ctx.agentPresets.defaultId
+    const preset = await this.ctx.agentPresets.resolve(presetId)
+    const presetScope = await this.ctx.agentPresets.acquireScope(preset.id)
+    const setup = async (agentCtx) => {
+      await this.ctx.agentPresets.mount(agentCtx, preset.id)
+    }
     try {
-      state.handle = await this.ctx.agents.resume({
-        resumeSessionId: state.sessionId,
-        ...(agentOptions === undefined ? {} : { agentOptions }),
-      })
-    } catch {
-      state.handle = await this.ctx.agents.create({
-        sessionId: state.sessionId,
-        meta: { cwd: workspace },
-        ...(agentOptions === undefined ? {} : { agentOptions }),
-      })
+      try {
+        state.handle = await this.ctx.agents.resume({
+          resumeSessionId: state.sessionId,
+          ...(agentOptions === undefined ? {} : { agentOptions }),
+          setup,
+        })
+      } catch {
+        state.handle = await this.ctx.agents.create({
+          sessionId: state.sessionId,
+          meta: { cwd: workspace, agentPreset: preset.id },
+          ...(agentOptions === undefined ? {} : { agentOptions }),
+          setup,
+        })
+      }
+    } finally {
+      await presetScope[Symbol.asyncDispose]()
     }
     try {
       if (this.config.permissionPreset) {
