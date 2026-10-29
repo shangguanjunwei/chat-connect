@@ -1,0 +1,12 @@
+node_modules/
+out/
+release/
+dist/
+.DS_Store
+*.log
+
+# Prepared at packaging time by scripts/prepare-node.mjs
+resources/node/
+
+# Local runtime experiments
+/tmp/

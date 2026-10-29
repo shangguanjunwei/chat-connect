@@ -1,0 +1,82 @@
+appId: com.dshstudio.app
+productName: DSH Studio
+copyright: Copyright © 2026 DSH Studio
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - out/**/*
+  - package.json
+  - '!**/*.map'
+  - '!**/*.md'
+
+# The bundled Harness runtime is spawned by a real Node process, so every
+# dependency has to exist on disk rather than inside the ASAR archive.
+asarUnpack:
+  - node_modules/**/*
+
+npmRebuild: false
+
+# Restore nested node_modules copies electron-builder leaves out.
+afterPack: scripts/after-pack.cjs
+
+# Reuse the Electron build installed by npm instead of downloading it again.
+electronDist: node_modules/electron/dist
+
+extraResources:
+  - from: build/icon.png
+    to: icon.png
+  - from: resources/node
+    to: node
+
+mac:
+  category: public.app-category.developer-tools
+  icon: build/icon.icns
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  identity: null
+  extendInfo:
+    CFBundleLocalizations:
+      - en
+      - zh_CN
+  target:
+    - target: dmg
+      arch:
+        - arm64
+    - target: zip
+      arch:
+        - arm64
+
+dmg:
+  title: DSH Studio
+  window:
+    width: 540
+    height: 380
+  contents:
+    - x: 150
+      y: 190
+      type: file
+    - x: 390
+      y: 190
+      type: link
+      path: /Applications
+
+win:
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+
+linux:
+  icon: build/icon.png
+  category: Development
+  target:
+    - AppImage
