@@ -133,6 +133,7 @@ export const WECHAT_UI_JS = String.raw`
     accounts: [],
     online: 0,
     settings: null,
+    wechatSessionIds: [],
     rootInput: null,
     pending: null,
     pendingBox: null,
@@ -275,6 +276,46 @@ export const WECHAT_UI_JS = String.raw`
         return data
       })
     })
+  }
+
+  function activeSessionId() {
+    try {
+      var raw = window.localStorage.getItem('dsh.sessions.current')
+      if (!raw) return ''
+      var parsed = JSON.parse(raw)
+      if (typeof parsed === 'string') return parsed
+      return parsed && parsed.sessionId ? String(parsed.sessionId) : ''
+    } catch (error) {
+      return ''
+    }
+  }
+
+  function applyWechatSessionMode() {
+    var id = activeSessionId()
+    var on = id !== '' && state.wechatSessionIds.indexOf(id) !== -1
+    if (on) document.documentElement.setAttribute('data-chat-connect-wechat-session', '')
+    else document.documentElement.removeAttribute('data-chat-connect-wechat-session')
+  }
+
+  async function refreshWechatSessionIds() {
+    try {
+      var data = await api('/sessions')
+      if (data && Array.isArray(data.sessionIds)) {
+        state.wechatSessionIds = data.sessionIds.map(String)
+        applyWechatSessionMode()
+      }
+    } catch (error) {
+      // Keep the last known set; a transient API failure must not reveal the
+      // composer in an active WeChat conversation.
+    }
+  }
+
+  function startWechatSessionMode() {
+    applyWechatSessionMode()
+    void refreshWechatSessionIds()
+    window.setInterval(applyWechatSessionMode, 400)
+    window.setInterval(refreshWechatSessionIds, 5000)
+    window.addEventListener('storage', applyWechatSessionMode)
   }
 
   function renderLauncher() {
@@ -798,6 +839,7 @@ export const WECHAT_UI_JS = String.raw`
     })
     render()
     refresh()
+    startWechatSessionMode()
   }
 
   if (document.readyState === 'loading') {

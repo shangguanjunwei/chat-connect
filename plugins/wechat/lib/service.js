@@ -190,6 +190,15 @@ export class WechatService {
             `<meta name="chat-connect-wechat-token" content="${this.token}">` +
             `<meta name="chat-connect-wechat-lang" content="${process.env.CHAT_CONNECT_WECHAT_LANG ?? ''}">`,
         })
+        table.push({
+          kind: 'html',
+          placement: 'head',
+          html:
+            '<style id="chat-connect-wechat-session-style">' +
+            'html[data-chat-connect-wechat-session] [data-composer-seat],' +
+            'html[data-chat-connect-wechat-session] [data-conversation-region="composer"]{display:none!important}' +
+            '</style>',
+        })
         table.push({ kind: 'script-src', placement: 'body', src: '/wechat-ui.js' })
       }),
     )
@@ -272,6 +281,7 @@ export class WechatService {
       skillPath: join(this.workspaceForAccount(state.account), 'skills'),
       customWorkspace: Boolean(state.account.workspace),
       login: publicLogin(state.login),
+      sessionId: state.sessionId,
     }))
     return {
       accounts,
@@ -913,6 +923,12 @@ export class WechatService {
       }
       if (method === 'GET' && path === '/health') {
         json(res, 200, { ok: true, accounts: this.accounts.size })
+        return
+      }
+      if (method === 'GET' && path === '/sessions') {
+        json(res, 200, {
+          sessionIds: [...this.accounts.values()].map((state) => state.sessionId),
+        })
         return
       }
       if (method === 'GET' && path === '/picker') {
