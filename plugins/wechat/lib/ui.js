@@ -36,6 +36,7 @@ export const WECHAT_UI_JS = String.raw`
         reset: '默认',
         pickFolder: '选择目录',
         skills: '技能',
+        open: '打开',
         confirmChange: '确认修改',
         cancel: '取消',
         empty: '还没有微信账号，先添加一个，再点「连接」扫码。',
@@ -94,6 +95,7 @@ export const WECHAT_UI_JS = String.raw`
         reset: 'Default',
         pickFolder: 'Choose folder',
         skills: 'Skills',
+        open: 'Open',
         confirmChange: 'Confirm',
         cancel: 'Cancel',
         empty: 'No WeChat account yet. Add one, then click Connect to scan.',
@@ -161,6 +163,7 @@ export const WECHAT_UI_JS = String.raw`
     overlay: null,
     list: null,
     tabs: null,
+    accountLayout: null,
     addInput: null,
     errorBox: null,
     onlinePill: null,
@@ -211,7 +214,13 @@ export const WECHAT_UI_JS = String.raw`
     ':host([data-theme="dark"]) .ccw-hint{color:#98a4bd}',
     '.ccw-warn{color:#b45309}',
     ':host([data-theme="dark"]) .ccw-warn{color:#fcd34d}',
-    '.ccw-workspace-path{margin-top:3px;font-size:10.5px;color:#6b7280;word-break:break-all;overflow-wrap:anywhere;white-space:normal}',
+    '.ccw-detail{margin-top:10px;border-top:1px solid rgba(148,163,184,.12)}',
+    '.ccw-detail-row{display:grid;grid-template-columns:72px minmax(0,1fr) auto;gap:10px;align-items:start;padding:8px 0;border-bottom:1px solid rgba(148,163,184,.1)}',
+    '.ccw-detail-label{padding-top:5px;font-size:10.5px;font-weight:600;color:#6b7280;white-space:nowrap}',
+    ':host([data-theme="dark"]) .ccw-detail-label{color:#98a4bd}',
+    '.ccw-detail-value{font-size:10.5px;line-height:1.55;color:#6b7280;word-break:break-all;overflow-wrap:anywhere}',
+    ':host([data-theme="dark"]) .ccw-detail-value{color:#98a4bd}',
+    '.ccw-detail-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}',
     ':host([data-theme="dark"]) .ccw-workspace-path{color:#98a4bd}',
     '.ccw-confirm{margin-bottom:12px;padding:11px 12px;border-radius:12px;border:1px solid rgba(7,193,96,.35);background:rgba(7,193,96,.08)}',
     '.ccw-confirm-text{font-size:11.5px;line-height:1.5;white-space:pre-wrap;word-break:break-all}',
@@ -230,11 +239,14 @@ export const WECHAT_UI_JS = String.raw`
     '.ccw-error{margin-bottom:12px;padding:10px 12px;border-radius:10px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.24);color:#b91c1c;font-size:11.5px;white-space:pre-wrap}',
     ':host([data-theme="dark"]) .ccw-error{color:#fecaca}',
     '.ccw-list{display:flex;flex-direction:column;gap:10px}',
-    '.ccw-tabs{display:flex;gap:4px;overflow-x:auto;margin:0 0 10px;padding:3px;border-radius:11px;background:rgba(148,163,184,.09)}',
+    '.ccw-account-layout{display:grid;grid-template-columns:158px minmax(0,1fr);gap:12px;align-items:start}',
+    '.ccw-account-layout.is-single{grid-template-columns:minmax(0,1fr)}',
+    '.ccw-account-layout.is-single .ccw-tabs{display:none}',
+    '.ccw-tabs{display:flex;flex-direction:column;gap:4px;overflow-y:auto;overflow-x:hidden;max-height:430px;margin:0;padding:4px;border-radius:11px;background:rgba(148,163,184,.09)}',
     '.ccw-tabs[hidden]{display:none}',
-    '.ccw-tabs::-webkit-scrollbar{height:3px}',
+    '.ccw-tabs::-webkit-scrollbar{width:3px}',
     '.ccw-tabs::-webkit-scrollbar-thumb{background:rgba(148,163,184,.3);border-radius:2px}',
-    '.ccw-tab{flex:0 0 auto;display:flex;align-items:center;gap:6px;height:32px;max-width:190px;padding:0 11px;border:0;border-radius:8px;background:transparent;color:#6b7280;font:inherit;font-size:12px;cursor:pointer}',
+    '.ccw-tab{flex:0 0 auto;display:flex;align-items:center;gap:6px;width:100%;height:34px;padding:0 9px;border:0;border-radius:8px;background:transparent;color:#6b7280;font:inherit;font-size:12px;text-align:left;cursor:pointer}',
     '.ccw-tab:hover{background:rgba(148,163,184,.12)}',
     '.ccw-tab.active{background:#fff;color:#111827;box-shadow:0 1px 4px rgba(0,0,0,.12)}',
     ':host([data-theme="dark"]) .ccw-tab{color:#98a4bd}',
@@ -295,8 +307,10 @@ export const WECHAT_UI_JS = String.raw`
     '      </div>',
     '      <div class="ccw-error" hidden></div>',
     '      <div class="ccw-confirm" hidden><div class="ccw-confirm-text" data-pending-text></div><div class="ccw-confirm-actions"><button class="ccw-btn primary" type="button" data-confirm-workspace>' + text.confirmChange + '</button><button class="ccw-btn" type="button" data-cancel-workspace>' + text.cancel + '</button></div></div>',
-    '      <div class="ccw-tabs" role="tablist" hidden></div>',
-    '      <div class="ccw-list"></div>',
+    '      <div class="ccw-account-layout" data-account-layout>',
+    '        <div class="ccw-tabs" role="tablist" hidden></div>',
+    '        <div class="ccw-list"></div>',
+    '      </div>',
     '    </div>',
     '    <footer class="ccw-foot"><span data-online></span><span>' + text.subtitle + '</span></footer>',
     '  </section>',
@@ -443,6 +457,9 @@ export const WECHAT_UI_JS = String.raw`
 
   function renderTabs() {
     if (!state.tabs) return
+    if (state.accountLayout) {
+      state.accountLayout.classList.toggle('is-single', state.accounts.length <= 1)
+    }
     state.tabs.textContent = ''
     if (state.accounts.length <= 1) {
       state.tabs.hidden = true
@@ -469,6 +486,39 @@ export const WECHAT_UI_JS = String.raw`
     }
   }
 
+  function appendDetailRow(container, label, value, actions) {
+    var row = document.createElement('div')
+    row.className = 'ccw-detail-row'
+    var labelNode = document.createElement('div')
+    labelNode.className = 'ccw-detail-label'
+    labelNode.textContent = label
+    var valueNode = document.createElement('div')
+    valueNode.className = 'ccw-detail-value'
+    valueNode.textContent = value || ''
+    valueNode.title = value || ''
+    var actionBox = document.createElement('div')
+    actionBox.className = 'ccw-detail-actions'
+    for (var i = 0; i < actions.length; i += 1) {
+      actionBox.appendChild(actions[i])
+    }
+    row.appendChild(labelNode)
+    row.appendChild(valueNode)
+    row.appendChild(actionBox)
+    container.appendChild(row)
+  }
+
+  function detailButton(account, action, label, title) {
+    var button = document.createElement('button')
+    button.className = 'ccw-btn'
+    button.type = 'button'
+    button.setAttribute('data-action', action)
+    button.setAttribute('data-id', account.id)
+    if (title) button.title = title
+    button.textContent = label
+    if (state.busy === account.id) button.disabled = true
+    return button
+  }
+
   function renderAccount(account) {
     var card = document.createElement('div')
     card.className = 'ccw-account'
@@ -487,16 +537,6 @@ export const WECHAT_UI_JS = String.raw`
     meta.textContent = (account.hasCredentials ? text.loggedIn : text.noLogin) + ' · ' + account.messageCount + ' ' + text.messages
     copy.appendChild(name)
     copy.appendChild(meta)
-    var workspacePath = document.createElement('div')
-    workspacePath.className = 'ccw-workspace-path'
-    workspacePath.textContent = text.workspace + ': ' + (account.workspace || '')
-    workspacePath.title = account.workspace || ''
-    copy.appendChild(workspacePath)
-    var skillPath = document.createElement('div')
-    skillPath.className = 'ccw-workspace-path'
-    skillPath.textContent = text.skills + ': ' + (account.skillPath || '')
-    skillPath.title = account.skillPath || ''
-    copy.appendChild(skillPath)
     var pill = document.createElement('span')
     pill.className = 'ccw-pill ' + statusClass(account.status)
     pill.textContent = text.status[account.status] || account.status
@@ -504,6 +544,17 @@ export const WECHAT_UI_JS = String.raw`
     top.appendChild(copy)
     top.appendChild(pill)
     card.appendChild(top)
+
+    var detail = document.createElement('div')
+    detail.className = 'ccw-detail'
+    appendDetailRow(detail, text.workspace, account.workspace, [
+      detailButton(account, 'workspace', text.pickFolder, account.workspace || ''),
+      detailButton(account, 'reset-workspace', text.reset, text.workspace),
+    ])
+    appendDetailRow(detail, text.skills, account.skillPath, [
+      detailButton(account, 'skills', text.open, account.skillPath || ''),
+    ])
+    card.appendChild(detail)
 
     var actions = document.createElement('div')
     actions.className = 'ccw-actions'
@@ -524,33 +575,6 @@ export const WECHAT_UI_JS = String.raw`
       login.textContent = text.login
       if (state.busy === account.id) login.disabled = true
       actions.appendChild(login)
-    }
-    var workspace = document.createElement('button')
-    workspace.className = 'ccw-btn'
-    workspace.type = 'button'
-    workspace.setAttribute('data-action', 'workspace')
-    workspace.setAttribute('data-id', account.id)
-    workspace.textContent = text.workspace
-    if (state.busy === account.id) workspace.disabled = true
-    actions.appendChild(workspace)
-    var skills = document.createElement('button')
-    skills.className = 'ccw-btn'
-    skills.type = 'button'
-    skills.setAttribute('data-action', 'skills')
-    skills.setAttribute('data-id', account.id)
-    skills.setAttribute('title', account.skillPath || '')
-    skills.textContent = text.skills
-    if (state.busy === account.id) skills.disabled = true
-    actions.appendChild(skills)
-    if (account.customWorkspace) {
-      var resetWs = document.createElement('button')
-      resetWs.className = 'ccw-btn'
-      resetWs.type = 'button'
-      resetWs.setAttribute('data-action', 'reset-workspace')
-      resetWs.setAttribute('data-id', account.id)
-      resetWs.textContent = text.reset
-      if (state.busy === account.id) resetWs.disabled = true
-      actions.appendChild(resetWs)
     }
     var rename = document.createElement('button')
     rename.className = 'ccw-btn'
@@ -924,6 +948,7 @@ export const WECHAT_UI_JS = String.raw`
     state.overlay = root.querySelector('.ccw-overlay')
     state.list = root.querySelector('.ccw-list')
     state.tabs = root.querySelector('.ccw-tabs')
+    state.accountLayout = root.querySelector('[data-account-layout]')
     state.addInput = root.querySelector('.ccw-add input')
     state.errorBox = root.querySelector('.ccw-error')
     state.onlinePill = root.querySelector('[data-online]')
