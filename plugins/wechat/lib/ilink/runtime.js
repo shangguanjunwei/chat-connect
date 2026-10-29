@@ -78,16 +78,47 @@ function normalize(raw) {
         return null;
     if (raw.message_state !== undefined && raw.message_state !== 2)
         return null;
-    const text = (raw.item_list ?? [])
-        .map((item) => item.text_item?.text)
-        .filter((value) => typeof value === 'string' && !!value)
-        .join('\n')
-        .trim();
-    if (!text)
+    const items = Array.isArray(raw.item_list) ? raw.item_list : [];
+    if (items.length === 0)
         return null;
+    const textPieces = [];
+    const voicePieces = [];
+    for (const item of items) {
+        if (typeof item.text_item?.text === 'string' && item.text_item.text.length > 0) {
+            textPieces.push(item.text_item.text);
+        }
+        if (typeof item.voice_item?.text === 'string' && item.voice_item.text.length > 0) {
+            voicePieces.push(item.voice_item.text);
+        }
+    }
+    const text = [...textPieces, ...voicePieces].join('\n').trim();
+    let kind = 'unknown';
+    if (textPieces.length > 0) {
+        kind = 'text';
+    } else if (voicePieces.length > 0 || items.some((item) => item.type === 3)) {
+        kind = 'voice';
+    } else {
+        for (const item of items) {
+            if (item.image_item)
+                kind = 'image';
+            else if (item.file_item)
+                kind = 'file';
+            else if (item.video_item)
+                kind = 'video';
+            else if (item.type === 2)
+                kind = 'image';
+            else if (item.type === 4)
+                kind = 'file';
+            else if (item.type === 5)
+                kind = 'video';
+            if (kind !== 'unknown')
+                break;
+        }
+    }
     const group = typeof raw.group_id === 'string' && raw.group_id.length > 0;
     return {
         text,
+        kind,
         senderId: raw.from_user_id ?? 'unknown',
         chatType: group ? 'group' : 'single',
         chatId: group ? raw.group_id : raw.from_user_id ?? 'unknown',

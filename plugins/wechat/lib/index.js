@@ -2,7 +2,7 @@ import Schema from '@deepseek-ai/schemastery'
 import { WechatService } from './service.js'
 
 export const name = 'chat-connect-wechat'
-export const inject = ['agents', 'webServer']
+export const inject = ['agents', 'agentDefaultModel', 'webServer', 'attachments']
 
 export const Config = Schema.object({
   dataDir: Schema.string().default('./.data'),
@@ -11,6 +11,9 @@ export const Config = Schema.object({
   provider: Schema.string().default(''),
   model: Schema.string().default(''),
   autoReply: Schema.boolean().default(true),
+  cdnBaseUrl: Schema.string().default('https://novac2c.cdn.weixin.qq.com/c2c'),
+  mediaMaxBytes: Schema.number().default(100 * 1024 * 1024),
+  mediaTimeoutMs: Schema.number().default(60_000),
 })
 
 export function apply(ctx, config) {

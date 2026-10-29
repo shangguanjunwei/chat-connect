@@ -52,7 +52,7 @@ Chat Connect 是一个本地 AI 工作台。它把开源的 Agent 引擎、完�
 - **原生窗口体验**：macOS 的配置 / 启动窗口使用无边框标题栏；工作台标题栏跟随浅色 / 深色 / 跟随系统设置。
 - **本地优先**：引擎只监听 `127.0.0.1`，API Key 使用系统安全存储加密，凭据文件权限 `0600`。
 - **可诊断**：实时显示启动进度；失败时展示服务日志末尾和完整日志路径。
-- **微信接入**：工作台右下角「微信」面板，支持多账号扫码登录、连接/断开，消息进入 DSH Agent 自动回复。
+- **微信接入**：工作台右下角「微信」面板，支持多账号扫码登录、连接/断开，文字、图片、文件、视频和语音转写进入 DSH Agent 自动回复。
 - **安全隔离**：工作台窗口不挂载 preload，网页内容无法调用文件选择、退出或配置接口。
 
 ---
@@ -267,6 +267,7 @@ CHAT_CONNECT_CDP_PORT=9222 npm run dev
 │   └── shared/types.ts       三端共享类型
 ├── plugins/wechat/            微信 iLink Host 插件 + 注入面板
 │   ├── lib/service.js         账号、二维码、Agent 桥接、控制 API
+│   ├── lib/media.js           iLink 媒体下载 / AES 解密 / 落盘
 │   ├── lib/ui.js              工作台内注入的微信面板
 │   └── lib/ilink/             iLink 客户端、轮询、账号存储
 ├── scripts/
@@ -388,8 +389,10 @@ Chat Connect 内置一个 DSH Host 插件 `plugins/wechat`，把微信 iLink Bot
 - **多账号**：添加多个微信机器人，分别备注（爸爸 / 妈妈 / …），互不影响；
 - **扫码登录**：点「连接」会请求 iLink 二维码，在面板里直接扫码；二维码状态每 1.5 秒更新；
 - **连接 / 断开 / 改名 / 删除**：登录凭据、游标、媒体按账号隔离；
-- **自动回复**：收到的文字消息会进入对应 DSH Agent session，最终 assistant 文本通过 iLink 发回微信；
-- **数据位置**：`<engine>/wechat/accounts/<id>/`；凭据 `credentials.json` 权限 `0600`；工作区 `<engine>/wechat/workspaces/<id>/`；
+- **多媒体消息**：图片/文件/视频会从 iLink CDN 下载、AES-128-ECB 解密并落盘；图片作为 `image` block、文件/视频作为 `file` block 进入对应 DSH Agent session；
+- **语音**：优先使用微信 `voice_item.text` 转写；没有转写时保存音频文件，并在消息正文中明确告诉 Agent 当前不能自动识别音频；
+- **自动回复**：最终 assistant 文本通过 iLink 发回微信；
+- **数据位置**：`<engine>/wechat/accounts/<id>/`；凭据 `credentials.json` 权限 `0600`；工作区 `<engine>/wechat/workspaces/<id>/`，媒体在 `<engine>/wechat/workspaces/<id>/media/<YYYY-MM-DD>/`；
 - **控制通道**：插件在 DSH Host 上注册 `/wechat-api`，二维码图片和账号状态都走本机同源接口；面板通过注入的短期 token 访问，不开放公网。
 
 插件在 profile 中作为 bundle 加载，不需要用户安装 pnpm 或手动改配置。首次启动时应用会预置：
@@ -403,10 +406,13 @@ Chat Connect 内置一个 DSH Host 插件 `plugins/wechat`，把微信 iLink Bot
 
 当前限制：
 
-- 只处理文字消息；图片、文件、语音转写暂不进入 Agent；
+- 语音没有微信转写时不会本地 ASR，只把音频保存成附件并在消息里说明；
+- Agent 的回复目前仍然只发送文字，暂不支持把图片/文件发回微信；
+- 视频按文件保存，不做关键帧抽取或视频理解；
+- 图片能否被模型直接理解取决于当前默认模型是否支持 image 输入；不支持时 DSH 会按图片占位文本投影，Agent 仍能看到文件引用；
 - WeChat 会话使用应用的默认模型；没有单独的模型配置；
 - Agent 触发审批时没有微信侧确认入口，复杂工具调用可能停在审批；
-- 由于没有真实微信账号，本仓库只验证了二维码生成、账号管理和 Agent session 创建；扫码确认与真实收发需要你用微信完成。
+- 由于没有真实微信账号，本仓库验证了二维码生成、账号管理、媒体下载/解密、图片/文件/语音消息进入 Agent session 的内容结构；扫码确认与真实收发需要你用微信完成。
 
 ## 修改界面
 
@@ -504,8 +510,11 @@ Finder / Dock 双击不受影响。
 - 服务重启：设置保存后停止旧服务、新端口启动、工作台窗口重建。
 - 退出：关闭工作台窗口后应用退出，引擎子进程被回收。
 - 失败路径：无效 API Key 时 `/models` 返回 401，界面显示错误；启动失败显示日志尾部与路径。
+- 微信面板：开发模式与打包 DMG 都能注入「微信」按钮，打开账号 / 二维码面板；二维码可正常生成。
+- 微信媒体：用本地 mock CDN 验证了图片 / 文件的下载与落盘、AES-128-ECB 解密、图片 `image` block 与文件 `file` block 进入 Agent session；语音转写进入正文，无转写时生成音频 `file` block。
+- 微信 Agent：默认模型从 DSH `agentDefaultModel` 读取；无效 Key 时 session 收到内容并返回 `AUTH` 错误。
 
-> 没有可用 API Key，因此只验证到 `/models` 401；未验证一次成功的模型推理。
+> 没有可用的真实微信账号和模型 Key，因此未完成一次真实扫码后的微信收发；上述验证覆盖二维码、媒体、附件内容和 Agent session 结构。
 
 ---
 

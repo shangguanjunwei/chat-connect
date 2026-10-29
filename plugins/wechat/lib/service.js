@@ -15,6 +15,7 @@ import { joinAssistantStreamText } from '@deepseek-ai/dsh-llm/assistant-stream'
 import { IlinkClient } from './ilink/client.js'
 import { WECHAT_UI_JS } from './ui.js'
 import { WechatAccountRuntime } from './ilink/runtime.js'
+import { WechatMediaStore } from './media.js'
 import {
   createAccount,
   loadAccounts,
@@ -68,10 +69,13 @@ export class WechatService {
     this.config = {
       dataDir: resolve(config.dataDir || './.data'),
       baseUrl: config.baseUrl || DEFAULT_BASE_URL,
-      provider: config.provider || 'deepseek-official',
-      model: config.model || 'deepseek-flash',
+      provider: config.provider || '',
+      model: config.model || '',
       autoReply: config.autoReply !== false,
       workspaceRoot: config.workspaceRoot || '',
+      cdnBaseUrl: config.cdnBaseUrl || 'https://novac2c.cdn.weixin.qq.com/c2c',
+      mediaMaxBytes: config.mediaMaxBytes ?? 100 * 1024 * 1024,
+      mediaTimeoutMs: config.mediaTimeoutMs ?? 60_000,
     }
     this.token = randomUUID()
     this.accounts = new Map()
@@ -334,6 +338,9 @@ export class WechatService {
   async connect(accountId) {
     const state = this.accounts.get(accountId)
     if (!state) throw new Error('账号不存在')
+    if (!state.credentials) {
+      state.credentials = await loadCredentials(this.config.dataDir, accountId)
+    }
     if (!state.credentials) return this.startLogin(accountId)
     await this.stopRuntime(state)
     const controller = new AbortController()
@@ -414,14 +421,9 @@ export class WechatService {
     state.lastIncoming = message
     state.pendingText = undefined
     try {
+      const content = await this.buildContent(accountId, message)
       const agent = await this.ensureAgent(accountId, state)
-      const text = `来自微信${message.chatType === 'group' ? '群聊' : '私聊'}（发送者 ${message.senderId}）：\n${message.text}`
-      agent.followup(
-        createUserMessage({
-          content: [{ type: 'text', text }],
-          source: { kind: 'user' },
-        }),
-      )
+      agent.followup(createUserMessage({ content, source: { kind: 'user' } }))
     } catch (error) {
       state.busy = false
       state.lastError = error instanceof Error ? error.message : String(error)
@@ -479,17 +481,101 @@ export class WechatService {
     void this.drain(accountId)
   }
 
-  async ensureAgent(accountId, state) {
-    if (state.handle) return state.handle.agent
-    const workspace = join(
+  workspacePath(accountId) {
+    return join(
       this.config.workspaceRoot || join(this.config.dataDir, 'wechat', 'workspaces'),
       accountId,
     )
+  }
+
+  async buildContent(accountId, message) {
+    const sender = message.chatType === 'group' ? '群聊' : '私聊'
+    const pieces = [`来自微信${sender}（发送者 ${message.senderId}）`]
+    let messageText = message.text
+    if (!messageText) {
+      messageText = (message.raw?.item_list ?? [])
+        .flatMap((item) => [
+          typeof item.text_item?.text === 'string' ? item.text_item.text : '',
+          typeof item.voice_item?.text === 'string' ? item.voice_item.text : '',
+        ])
+        .filter(Boolean)
+        .join('\n')
+        .trim()
+    }
+    if (messageText) pieces.push(messageText)
+    const content = [{ type: 'text', text: pieces.join('\n') }]
+    const mediaStore = new WechatMediaStore({
+      dir: join(this.workspacePath(accountId), 'media'),
+      cdnBaseUrl: this.config.cdnBaseUrl,
+      maxBytes: this.config.mediaMaxBytes,
+      timeoutMs: this.config.mediaTimeoutMs,
+    })
+    const media = await mediaStore.downloadAll(message.raw)
+    for (const item of media) {
+      const label = item.kind === 'image' ? '图片' : item.kind === 'file' ? '文件' : item.kind === 'video' ? '视频' : '语音'
+      if (item.error) {
+        content.push({ type: 'text', text: `[${label}处理失败] ${item.error}` })
+        continue
+      }
+      if (!item.data) continue
+      if (item.kind === 'image' && ['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(item.mimeType)) {
+        try {
+          const attachment = await this.ctx.attachments.saveImage({
+            data: item.data,
+            mediaType: item.mimeType,
+            name: item.fileName,
+          })
+          content.push({ type: 'text', text: `[图片 ${item.fileName ?? ''}]` })
+          content.push({ type: 'image', attachment })
+          continue
+        } catch (error) {
+          content.push({
+            type: 'text',
+            text: `[图片 ${item.fileName ?? ''}] 未作为图片附件接收（${error instanceof Error ? error.message : String(error)}），已保存到 ${item.localPath}`,
+          })
+        }
+      }
+      try {
+        const attachment = await this.ctx.attachments.saveFile({
+          data: item.data,
+          name: item.fileName || `${item.kind}-${Date.now()}`,
+        })
+        const note =
+          item.kind === 'voice'
+            ? `[语音 ${item.fileName ?? ''}] 微信没有提供转写，音频已保存为文件；当前不能自动识别音频内容。`
+            : `[${label} ${item.fileName ?? ''}]`
+        content.push({ type: 'text', text: note })
+        content.push({ type: 'file', attachment })
+      } catch (error) {
+        content.push({
+          type: 'text',
+          text: `[${label} ${item.fileName ?? ''}] 已保存到 ${item.localPath}，但无法作为附件交给 Agent：${error instanceof Error ? error.message : String(error)}`,
+        })
+      }
+    }
+    if (content.length === 1 && !message.text && media.length === 0) {
+      content.push({ type: 'text', text: '[收到一条暂不支持的消息类型]' })
+    }
+    return content
+  }
+
+  async ensureAgent(accountId, state) {
+    if (state.handle) return state.handle.agent
+    const workspace = this.workspacePath(accountId)
     await mkdir(workspace, { recursive: true, mode: 0o700 })
-    const agentOptions =
-      this.config.provider && this.config.model
-        ? { provider: this.config.provider, model: this.config.model }
-        : undefined
+    let agentOptions
+    if (this.config.provider && this.config.model) {
+      agentOptions = { provider: this.config.provider, model: this.config.model }
+    } else {
+      const selection = this.ctx.agentDefaultModel?.currentSelection?.()
+      if (selection?.provider && selection?.model) {
+        agentOptions = {
+          provider: selection.provider,
+          model: selection.model,
+          ...(selection.reasoningEffort ? { reasoningEffort: selection.reasoningEffort } : {}),
+        }
+      }
+    }
     try {
       state.handle = await this.ctx.agents.resume({
         resumeSessionId: state.sessionId,
@@ -533,18 +619,25 @@ export class WechatService {
         const state = this.find(body.accountId)
         if (!state) throw new Error('账号不存在')
         state.status = 'online'
+        const raw = {
+          dev: true,
+          context_token: 'dev',
+          from_user_id: 'dev',
+          to_user_id: 'bot',
+          message_id: Date.now(),
+          create_time_ms: Date.now(),
+        }
+        if (Array.isArray(body.itemList)) {
+          raw.item_list = body.itemList
+        } else {
+          raw.item_list = [{ type: 1, text_item: { text: String(body.text || '你好') } }]
+        }
         this.onMessage(body.accountId, {
-          text: String(body.text || '你好'),
+          text: String(body.text || ''),
           senderId: 'dev',
           chatType: 'single',
           chatId: 'dev',
-          raw: {
-            dev: true,
-            context_token: 'dev',
-            from_user_id: 'dev',
-            to_user_id: 'bot',
-            message_id: Date.now(),
-          },
+          raw,
         })
         json(res, 200, this.publicState())
         return

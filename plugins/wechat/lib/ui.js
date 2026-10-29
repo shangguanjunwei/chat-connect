@@ -19,7 +19,7 @@ export const WECHAT_UI_JS = String.raw`
   var text = zh
     ? {
         title: '微信连接',
-        subtitle: '扫码接入微信，由 Chat Connect 自动回复',
+        subtitle: '扫码接入微信；文字、图片、文件和语音转写自动进入 Agent',
         addPlaceholder: '账号备注，例如：爸爸',
         add: '添加微信账号',
         empty: '还没有微信账号，先添加一个，再点「连接」扫码。',
@@ -57,7 +57,7 @@ export const WECHAT_UI_JS = String.raw`
       }
     : {
         title: 'WeChat',
-        subtitle: 'Scan to connect WeChat; Chat Connect replies automatically',
+        subtitle: 'Scan to connect; text, images, files and voice go to the Agent',
         addPlaceholder: 'Account label, e.g. Dad',
         add: 'Add WeChat account',
         empty: 'No WeChat account yet. Add one, then click Connect to scan.',
