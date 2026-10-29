@@ -220,6 +220,7 @@ export class WechatService {
     await this.loadSettings()
     await this.loadAccounts()
     this.installSkills()
+    void this.syncExistingSessionTitles().catch(() => undefined)
     this.ctx.logger.info(`Chat Connect 微信插件已加载（${this.accounts.size} 个账号）`)
   }
 
@@ -365,7 +366,7 @@ export class WechatService {
       else state.account.workspace = nextWorkspace
     }
     const after = this.workspaceForAccount(state.account)
-    if (hasLabel) this.applySessionTitle(accountId, state, nextLabel)
+    if (hasLabel) void this.renameSessionTitle(accountId, state, nextLabel).catch(() => undefined)
     if (hasWorkspace && resolve(after) !== resolve(before)) {
       await this.stopRuntime(state)
       state.sessionId = this.sessionIdFor(accountId, after)
@@ -868,20 +869,50 @@ export class WechatService {
     return content
   }
 
+  setSessionTitle(session, label) {
+    try {
+      const current = this.ctx.sessionTitle.get(session)
+      if (current?.title === label && current.source?.kind === 'user') return true
+      this.ctx.sessionTitle.rename(session, label)
+      return true
+    } catch (error) {
+      this.ctx.logger.warn(
+        `微信会话标题设置失败（${label}）: ${error instanceof Error ? error.message : String(error)}`,
+      )
+      return false
+    }
+  }
+
   applySessionTitle(accountId, state, label) {
     const agent =
       state.handle?.agent ??
       state.externalAgent ??
       this.ctx.agents.get(state.sessionId)
     if (!agent) return false
+    return this.setSessionTitle(agent.session, label ?? state.account.label)
+  }
+
+  async renameSessionTitle(accountId, state, label) {
+    // The live path is cheap. For a persisted-but-offline session, resume only
+    // long enough to append the user title, then release it. Discovery stays
+    // side-effect free when the session has never been created.
+    if (this.applySessionTitle(accountId, state, label)) return true
+    let handle
     try {
-      this.ctx.sessionTitle.rename(agent.session, label ?? state.account.label)
-      return true
-    } catch (error) {
-      this.ctx.logger.warn(
-        `微信会话标题设置失败（${state.account.label}）: ${error instanceof Error ? error.message : String(error)}`,
-      )
+      handle = await this.ctx.agents.resume({ resumeSessionId: state.sessionId })
+    } catch {
       return false
+    }
+    try {
+      return this.setSessionTitle(handle.agent.session, label ?? state.account.label)
+    } finally {
+      await handle.dispose().catch(() => undefined)
+    }
+  }
+
+  async syncExistingSessionTitles() {
+    for (const [accountId, state] of this.accounts) {
+      await this.renameSessionTitle(accountId, state, state.account.label).catch(() => undefined)
     }
   }
 
