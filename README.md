@@ -392,6 +392,7 @@ Chat Connect 内置一个 DSH Host 插件 `plugins/wechat`，把微信 iLink Bot
 - **多媒体消息**：图片/文件/视频会从 iLink CDN 下载、AES-128-ECB 解密并落盘；图片作为 `image` block、文件/视频作为 `file` block 进入对应 DSH Agent session；
 - **语音**：优先使用微信 `voice_item.text` 转写；没有转写时保存音频文件，并在消息正文中明确告诉 Agent 当前不能自动识别音频；
 - **微信会话隐藏输入框**：在工作台打开微信 session 时，底部聊天输入框会自动隐藏，避免在微信上下文之外手动输入；切回普通会话输入框自动恢复；
+- **与工作台共享 session**：如果微信 session 已经在工作台打开，插件会复用这个 live Agent，不再 `resume/create` 同一个 session，避免 `session already exists` 导致消息被丢弃；
 - **完整工具集**：微信 session 创建/恢复时会挂载 DSH 的默认 agent preset（默认 `standard`），包含 `bash`、文件读写/编辑、搜索、`skill`、subagent 等工具，而不是只有基础工作目录工具；
 - **完全权限**：微信 session 在创建 / 恢复后自动切换为 `danger-full-access`；审批策略保持 `ask`，但微信 session 的 `approval/request` 由插件自动返回 `allowed-once`。因此文件系统完全放开，需要审批的工具也不会卡住；
 - **自动回复**：最终 assistant 文本通过 iLink 发回微信；
@@ -555,6 +556,7 @@ Finder / Dock 双击不受影响。
 - 微信权限：session 日志出现 `permission/preset=danger-full-access`、`sandbox/mode=danger-full-access`、最终 `approval/policy=ask`；插件以 `prepend` 注册审批 waterfall，WeChat session 的 ask 直接返回 `allowed-once`。
 - 微信工具：请求头工具列表包含 `bash`、`read`、`write`、`edit`、`grep`、`glob`、`skill`、`subagent` 等，确认 preset 已挂载。
 - 微信输入框：把 `dsh.sessions.current` 指向微信 session 时，`html[data-chat-connect-wechat-session]` 生效、`[data-composer-seat]` 计算样式为 `none`；切回普通 session 后恢复 `flex`。
+- live Agent 复用：模拟工作台持有微信 session Agent 时，第二条消息不再报 `session already exists`，而是直接使用同一 Agent。
 - 每账号 Skills：两个账号分别在 `skills/` 放入不同 skill，`/accounts/<id>/skills` 只返回自己的 skill，隔离验证通过。
 - 微信媒体：用本地 mock CDN 验证了图片 / 文件的下载与落盘、AES-128-ECB 解密、图片 `image` block 与文件 `file` block 进入 Agent session；语音转写进入正文，无转写时生成音频 `file` block。
 - 微信 Agent：默认模型从 DSH `agentDefaultModel` 读取；无效 Key 时 session 收到内容并返回 `AUTH` 错误。

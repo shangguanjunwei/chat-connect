@@ -242,6 +242,7 @@ export class WechatService {
         handle: null,
         pendingText: undefined,
         lastIncoming: undefined,
+        externalAgent: null,
         sessionId: this.sessionIdFor(account.id, this.workspaceForAccount(account)),
       })
       await this.ensureSkillsDir(account.id).catch(() => undefined)
@@ -316,6 +317,7 @@ export class WechatService {
       handle: null,
       pendingText: undefined,
       lastIncoming: undefined,
+      externalAgent: null,
       sessionId: this.sessionIdFor(account.id, this.workspaceForAccount(account)),
     })
     await this.ensureSkillsDir(account.id).catch(() => undefined)
@@ -557,6 +559,7 @@ export class WechatService {
     state.queue.length = 0
     state.pendingText = undefined
     state.lastIncoming = undefined
+    state.externalAgent = null
     if (state.handle) {
       await state.handle.dispose().catch(() => undefined)
       state.handle = null
@@ -843,8 +846,35 @@ export class WechatService {
     return content
   }
 
+  applyWechatSessionPolicy(agent) {
+    try {
+      if (this.config.permissionPreset) {
+        this.ctx.permissionPresets.set(agent.session, this.config.permissionPreset)
+        // The full-access preset pins approval=never; asks would be rejected.
+        // Keep the sandbox full and let the prepended WeChat approval listener
+        // grant every ask instead.
+        setApprovalPolicy(agent.session, 'ask')
+      }
+    } catch (error) {
+      this.ctx.logger.warn(
+        `微信会话设置权限预设失败（${this.config.permissionPreset}）: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    }
+  }
+
+  adoptLiveAgent(accountId, state, agent) {
+    state.handle = null
+    state.externalAgent = agent
+    this.applyWechatSessionPolicy(agent)
+    this.sessionToAccount.set(state.sessionId, accountId)
+    this.ctx.logger.info(`微信会话复用工作台已打开的 Agent: ${state.sessionId}`)
+    return agent
+  }
+
   async ensureAgent(accountId, state) {
     if (state.handle) return state.handle.agent
+    const live = this.ctx.agents.get(state.sessionId)
+    if (live) return this.adoptLiveAgent(accountId, state, live)
     const workspace = this.workspacePath(accountId)
     await mkdir(workspace, { recursive: true, mode: 0o700 })
     await this.ensureSkillsDir(accountId).catch(() => undefined)
@@ -876,6 +906,8 @@ export class WechatService {
           setup,
         })
       } catch {
+        const adopted = this.ctx.agents.get(state.sessionId)
+        if (adopted) return this.adoptLiveAgent(accountId, state, adopted)
         state.handle = await this.ctx.agents.create({
           sessionId: state.sessionId,
           meta: { cwd: workspace, agentPreset: preset.id },
@@ -886,19 +918,7 @@ export class WechatService {
     } finally {
       await presetScope[Symbol.asyncDispose]()
     }
-    try {
-      if (this.config.permissionPreset) {
-        this.ctx.permissionPresets.set(state.handle.agent.session, this.config.permissionPreset)
-        // The full-access preset pins approval=never, which would reject any
-        // ask that still reaches the approval seam. WeChat sessions instead
-        // stay on full sandbox and auto-approve through the listener above.
-        setApprovalPolicy(state.handle.agent.session, 'ask')
-      }
-    } catch (error) {
-      this.ctx.logger.warn(
-        `微信会话设置权限预设失败（${this.config.permissionPreset}）: ${error instanceof Error ? error.message : String(error)}`,
-      )
-    }
+    this.applyWechatSessionPolicy(state.handle.agent)
     this.sessionToAccount.set(state.sessionId, accountId)
     return state.handle.agent
   }
