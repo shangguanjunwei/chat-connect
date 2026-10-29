@@ -15,10 +15,18 @@ const { cpSync, existsSync, mkdirSync } = require('node:fs')
 const { join, relative, sep } = require('node:path')
 
 function productionPaths(projectDir) {
+  // Windows resolves npm through npm.cmd; execFileSync needs the shell to
+  // launch it. The argument list is fixed and contains no user input.
+  const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
   const output = execFileSync(
-    'npm',
+    npm,
     ['ls', '--omit=dev', '--all', '--parseable'],
-    { cwd: projectDir, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
+    {
+      cwd: projectDir,
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+      shell: process.platform === 'win32',
+    },
   )
   const nodeModules = join(projectDir, 'node_modules') + sep
   return output

@@ -46,6 +46,8 @@ export const WECHAT_UI_JS = String.raw`
         renamePrompt: '输入新的账号备注',
         renameTitle: '修改账号备注',
         renameHint: '只改变面板显示名称，不影响微信登录或工作区。',
+        workspacePathTitle: '输入工作区路径',
+        workspacePathHint: '请输入绝对路径；留空恢复默认，目录不存在会自动创建。修改路径会断开在线账号并使用新的 session。',
         remove: '删除',
         copy: '复制二维码链接',
         copied: '链接已复制',
@@ -102,6 +104,8 @@ export const WECHAT_UI_JS = String.raw`
         renamePrompt: 'New account label',
         renameTitle: 'Rename account',
         renameHint: 'Changes the panel label only; sign-in and workspace stay unchanged.',
+        workspacePathTitle: 'Workspace path',
+        workspacePathHint: 'Enter an absolute path; leave empty for the default. The directory is created if needed. Changing it disconnects the account and starts a new session.',
         remove: 'Remove',
         copy: 'Copy QR link',
         copied: 'Copied',
@@ -144,7 +148,13 @@ export const WECHAT_UI_JS = String.raw`
     pendingText: null,
     renameDialog: null,
     renameInput: null,
+    renameTitle: null,
+    renameHint: null,
     renameAccountId: '',
+    dialogKind: '',
+    dialogAccountId: '',
+    dialogOnline: false,
+    dialogLabel: '',
     timer: null,
     launcher: null,
     overlay: null,
@@ -271,8 +281,8 @@ export const WECHAT_UI_JS = String.raw`
     '</div>',
     '<div class="ccw-rename" hidden>',
     '  <div class="ccw-rename-card" role="dialog" aria-modal="true">',
-    '    <h3>' + text.renameTitle + '</h3>',
-    '    <p>' + text.renameHint + '</p>',
+    '    <h3 data-rename-title>' + text.renameTitle + '</h3>',
+    '    <p data-rename-hint>' + text.renameHint + '</p>',
     '    <input type="text" maxlength="40" data-rename-input>',
     '    <div class="ccw-rename-actions"><button class="ccw-btn" type="button" data-rename-cancel>' + text.cancel + '</button><button class="ccw-btn primary" type="button" data-rename-confirm>' + text.save + '</button></div>',
     '  </div>',
@@ -645,14 +655,19 @@ export const WECHAT_UI_JS = String.raw`
         setPending({ kind: 'account', accountId: accountId, path: data.path, online: online, label: label })
       }
     } catch (error) {
-      var message = error instanceof Error ? error.message : String(error)
-      if (kind === 'account' && /原生|native|browse|目录选择器/i.test(message)) {
-        var manual = window.prompt(text.workspacePrompt, currentPath || '')
-        if (manual !== null) {
-          setPending({ kind: 'account', accountId: accountId, path: manual.trim(), online: online, label: label })
-        }
+      // Linux without zenity/kdialog (and any other non-native picker
+      // deployment) opens the in-panel path dialog. Electron does not support
+      // window.prompt, so the fallback must be real UI, not a browser prompt.
+      if (kind === 'root') {
+        openWorkspacePath(
+          'root-workspace',
+          '',
+          currentPath || (state.settings ? state.settings.workspaceRoot : ''),
+          false,
+          ''
+        )
       } else {
-        showError(message)
+        openWorkspacePath('account-workspace', accountId, currentPath || '', online, label)
       }
     } finally {
       state.busy = ''
@@ -716,11 +731,17 @@ export const WECHAT_UI_JS = String.raw`
     clearPending()
   }
 
-  function openRename(accountId, currentLabel) {
-    state.renameAccountId = accountId
+  function openTextDialog(kind, accountId, online, label, title, hint, value) {
+    state.dialogKind = kind
+    state.dialogAccountId = accountId || ''
+    state.dialogOnline = Boolean(online)
+    state.dialogLabel = label || ''
+    state.renameAccountId = accountId || ''
+    if (state.renameTitle) state.renameTitle.textContent = title
+    if (state.renameHint) state.renameHint.textContent = hint
     if (state.renameDialog) state.renameDialog.hidden = false
     if (state.renameInput) {
-      state.renameInput.value = currentLabel || ''
+      state.renameInput.value = value || ''
       window.setTimeout(function () {
         state.renameInput.focus()
         state.renameInput.select()
@@ -728,23 +749,51 @@ export const WECHAT_UI_JS = String.raw`
     }
   }
 
+  function openRename(accountId, currentLabel) {
+    openTextDialog('rename', accountId, false, currentLabel, text.renameTitle, text.renameHint, currentLabel)
+  }
+
+  function openWorkspacePath(kind, accountId, currentPath, online, label) {
+    openTextDialog(
+      kind,
+      accountId,
+      online,
+      label,
+      text.workspacePathTitle,
+      text.workspacePathHint,
+      currentPath || ''
+    )
+  }
+
   function closeRename() {
     state.renameAccountId = ''
+    state.dialogKind = ''
+    state.dialogAccountId = ''
+    state.dialogOnline = false
+    state.dialogLabel = ''
     if (state.renameDialog) state.renameDialog.hidden = true
   }
 
   async function confirmRename() {
-    var accountId = state.renameAccountId
-    var label = state.renameInput ? state.renameInput.value.trim() : ''
+    var kind = state.dialogKind
+    var accountId = state.dialogAccountId
+    var value = state.renameInput ? state.renameInput.value.trim() : ''
+    if (!kind) return
+    if (kind === 'root-workspace') {
+      closeRename()
+      await saveWorkspaceRoot(value, true)
+      return
+    }
     if (!accountId) return
-    if (!label) {
+    if (kind === 'rename' && !value) {
       showError(text.renamePrompt)
       return
     }
     state.busy = accountId
     showError('')
     try {
-      applyState(await api('/accounts/' + encodeURIComponent(accountId), { method: 'PATCH', body: { label: label } }))
+      var body = kind === 'rename' ? { label: value } : { workspace: value }
+      applyState(await api('/accounts/' + encodeURIComponent(accountId), { method: 'PATCH', body: body }))
       closeRename()
     } catch (error) {
       showError(error instanceof Error ? error.message : String(error))
@@ -826,6 +875,8 @@ export const WECHAT_UI_JS = String.raw`
     state.pendingText = root.querySelector('[data-pending-text]')
     state.renameDialog = root.querySelector('.ccw-rename')
     state.renameInput = root.querySelector('[data-rename-input]')
+    state.renameTitle = root.querySelector('[data-rename-title]')
+    state.renameHint = root.querySelector('[data-rename-hint]')
     root.querySelector('[data-rename-cancel]').addEventListener('click', closeRename)
     root.querySelector('[data-rename-confirm]').addEventListener('click', function () {
       void confirmRename()

@@ -42,12 +42,8 @@ mac:
       - en
       - zh_CN
   target:
-    - target: dmg
-      arch:
-        - arm64
-    - target: zip
-      arch:
-        - arm64
+    - dmg
+    - zip
 
 dmg:
   title: Chat Connect

@@ -291,18 +291,40 @@ CHAT_CONNECT_CDP_PORT=9222 npm run dev
 # macOS Apple Silicon：DMG + ZIP
 npm run dist:mac
 
-# 只生成未签名的 .app（调试打包结果）
-npm run package
+# macOS Intel：DMG + ZIP
+npm run dist:mac:x64
 
 # Windows x64（在 Windows 上执行）
 npm run dist:win
+
+# Linux x64 AppImage（在 Linux 上执行）
+npm run dist:linux
+
+# 只生成未签名的 .app（调试打包结果）
+npm run package
 ```
+
+> 三平台不能可靠地在一台 macOS 上交叉打包：`prepare-node` 会按当前系统下载 Node，Harness 还包含按平台安装的原生依赖。请在各平台机器或 CI 上构建。
 
 产物：
 
-- `release/Chat Connect-0.2.1-rc.4-arm64.dmg`（约 313 MB）
-- `release/Chat Connect-0.2.1-rc.4-arm64-mac.zip`（约 334 MB）
-- `release/mac-arm64/Chat Connect.app`（未压缩约 1.1 GB）
+- macOS arm64：`release/Chat Connect-0.2.1-rc.4-arm64.dmg` / `...-mac.zip`
+- macOS x64：`release/*.dmg` / `release/*-mac.zip`（Intel 机器或 CI）
+- Windows x64：`release/*.exe`
+- Linux x64：`release/*.AppImage`
+
+具体文件名以 `release/` 实际产物为准。
+
+### 三平台 CI
+
+仓库提供 [`.github/workflows/build.yml`](.github/workflows/build.yml)，在 GitHub Actions 手动触发 `Build desktop apps`：
+
+- `macos-15` → macOS arm64；
+- `macos-15-intel` → macOS x64；
+- `windows-latest` → Windows x64 NSIS；
+- `ubuntu-latest` → Linux x64 AppImage。
+
+只上传 artifacts，不创建 GitHub Release。CI 和本地构建产物都是未签名版本：macOS 需要 Gatekeeper 放行，Windows 会有 SmartScreen 提示。正式分发需要 Apple Developer ID / Windows 代码签名证书。
 
 ### 内置 Node
 
@@ -531,7 +553,7 @@ Finder / Dock 双击不受影响。
 
 - 未签名构建；对外分发需要 Apple Developer ID / Windows 代码签名。
 - macOS 默认只构建 arm64；Intel 需要调整 `electron-builder.yml` 或传 `--x64`。
-- Windows / Linux 配置已提供，但未在真实机器上完成打包验证。
+- Windows / Linux 配置和 CI 已提供，但当前只在 macOS 上实际验证了 DMG；Windows / Linux 需要在对应机器或 CI 上跑一次确认。
 - 暂不支持应用内自动更新。
 - 暂不支持 DeepSeek 账号 OAuth 登录。
 - 工作台主题同步采用 1 秒轮询页面 `data-ds-theme-source`，切换主题最多约 1 秒后原生标题栏生效。

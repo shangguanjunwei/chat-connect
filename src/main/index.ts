@@ -34,7 +34,7 @@ if (!app.isPackaged) {
 }
 
 if (process.platform === 'win32') {
-  app.setAppUserModelId('com.dshstudio.app')
+  app.setAppUserModelId('com.shangguanjunwei.chatconnect')
 }
 
 const menuActions: MenuActions = {

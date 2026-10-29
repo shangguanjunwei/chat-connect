@@ -19,7 +19,9 @@
     "dist:mac": "npm run build && node scripts/prepare-node.mjs && electron-builder --mac --arm64",
     "dist:win": "npm run build && node scripts/prepare-node.mjs && electron-builder --win --x64",
     "prepare:node": "node scripts/prepare-node.mjs",
-    "upgrade:core": "node scripts/upgrade-core.mjs"
+    "upgrade:core": "node scripts/upgrade-core.mjs",
+    "dist:mac:x64": "npm run build && node scripts/prepare-node.mjs && electron-builder --mac --x64",
+    "dist:linux": "npm run build && node scripts/prepare-node.mjs && electron-builder --linux --x64"
   },
   "dependencies": {
     "@deepseek-ai/cordis-plugin-group": "~1.0.5",
