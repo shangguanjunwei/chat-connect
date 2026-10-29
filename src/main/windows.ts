@@ -1,6 +1,7 @@
 import { BrowserWindow, nativeTheme, shell } from 'electron'
 import { join } from 'node:path'
 import { WORKSPACE_BRAND_CSS } from './workspace-branding'
+import { loadSettings } from './settings'
 
 const RENDERER_URL = process.env.ELECTRON_RENDERER_URL
 const preloadPath = join(__dirname, '../preload/index.js')
@@ -9,6 +10,7 @@ const rendererFile = join(__dirname, '../renderer/index.html')
 let shellWindow: BrowserWindow | null = null
 let workspaceWindow: BrowserWindow | null = null
 let shellRoute = ''
+let shellFitTimer: ReturnType<typeof setInterval> | null = null
 
 function loadRoute(window: BrowserWindow, route: string): void {
   if (!window.isDestroyed()) {
@@ -64,11 +66,13 @@ export function openShell(route = ''): BrowserWindow {
     return window
   }
 
+  const compactBoot =
+    (route === '' || route === '/boot') && loadSettings().onboardingComplete === true
   const window = new BrowserWindow({
-    width: 1080,
-    height: 720,
-    minWidth: 900,
-    minHeight: 620,
+    width: compactBoot ? 652 : 1080,
+    height: compactBoot ? 700 : 720,
+    minWidth: compactBoot ? 560 : 900,
+    minHeight: compactBoot ? 420 : 620,
     show: false,
     title: 'Chat Connect',
     backgroundColor: '#0b1220',
@@ -88,6 +92,10 @@ export function openShell(route = ''): BrowserWindow {
   window.once('ready-to-show', () => window.show())
   window.on('closed', () => {
     if (shellWindow === window) shellWindow = null
+    if (shellFitTimer !== null) {
+      clearInterval(shellFitTimer)
+      shellFitTimer = null
+    }
   })
   window.webContents.setWindowOpenHandler(({ url }) => {
     openExternalSafely(url)
@@ -103,7 +111,81 @@ export function openShell(route = ''): BrowserWindow {
   })
 
   loadRoute(window, route)
+  fitShellWindow(window)
   return window
+}
+
+/**
+ * Fit the shell window to the boot card once it is on screen. The boot screen
+ * does not need the large onboarding canvas: measure the rendered card and
+ * resize its content area to that card plus the frame padding. Setup/settings
+ * still restore the normal 1080x720 canvas.
+ */
+function fitShellWindow(window: BrowserWindow): void {
+  if (shellFitTimer !== null) {
+    clearInterval(shellFitTimer)
+    shellFitTimer = null
+  }
+  let lastMode = ''
+  const tick = async (): Promise<void> => {
+    if (window.isDestroyed()) {
+      if (shellFitTimer !== null) {
+        clearInterval(shellFitTimer)
+        shellFitTimer = null
+      }
+      return
+    }
+    try {
+      const layout = (await window.webContents.executeJavaScript(
+        `(() => {
+          const wizard = document.querySelector('.wizard')
+          if (wizard) return { mode: 'wizard', width: 1080, height: 720 }
+          const card = document.querySelector('.boot-card')
+          if (!card) return { mode: 'other', width: 0, height: 0 }
+          const frame = document.querySelector('.boot-frame')
+          const style = frame ? getComputedStyle(frame) : getComputedStyle(document.body)
+          const rect = card.getBoundingClientRect()
+          const px = (value) => Number.parseFloat(value) || 0
+          return {
+            mode: 'boot',
+            width: Math.ceil(rect.width + px(style.paddingLeft) + px(style.paddingRight)),
+            height: Math.ceil(rect.height + px(style.paddingTop) + px(style.paddingBottom)),
+          }
+        })()`,
+        true,
+      )) as { mode: 'boot' | 'wizard' | 'other'; width: number; height: number }
+
+      if (layout.mode === 'wizard') {
+        if (lastMode !== 'wizard') {
+          window.setMinimumSize(900, 620)
+          window.setContentSize(1080, 720)
+          window.center()
+          lastMode = 'wizard'
+        }
+        return
+      }
+      if (layout.mode !== 'boot' || layout.width <= 0 || layout.height <= 0) {
+        lastMode = layout.mode
+        return
+      }
+
+      // Pin the boot width: measuring width from the card creates a feedback
+      // loop once the viewport (and therefore the card) shrinks with it.
+      const width = 652
+      const height = Math.max(420, layout.height)
+      window.setMinimumSize(560, 420)
+      const [currentWidth = 0, currentHeight = 0] = window.getContentSize()
+      if (Math.abs(currentWidth - width) > 2 || Math.abs(currentHeight - height) > 2) {
+        window.setContentSize(width, height)
+        window.center()
+      }
+      lastMode = 'boot'
+    } catch {
+      // The renderer may not be ready yet, or the window is navigating.
+    }
+  }
+  shellFitTimer = setInterval(() => void tick(), 500)
+  setTimeout(() => void tick(), 180)
 }
 
 export function closeShell(): void {
